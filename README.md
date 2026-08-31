@@ -4,7 +4,7 @@ A full-stack finance application for importing synthetic transaction data, apply
 categorization rules, tracking monthly budgets, and visualizing spending. The project is being built
 as a production-shaped portfolio system with explicit architecture and security decisions.
 
-## Current milestone: foundation
+## Current milestone: authenticated finance API
 
 The repository currently provides:
 
@@ -13,8 +13,15 @@ The repository currently provides:
 - a React 19 and TypeScript client built with Vite;
 - PostgreSQL 18 through Docker Compose;
 - a database-aware `GET /api/v1/health/` endpoint;
+- authenticated CRUD APIs for accounts, categories, and transactions;
+- UUID identifiers, signed decimal money values, ownership checks, and database constraints;
+- account, category, status, and date-range transaction filters;
+- archive-first handling for financial metadata referenced by transaction history;
 - Pytest, Vitest, and Playwright smoke tests; and
 - GitHub Actions gates for linting, tests, production builds, and Docker images.
+
+The backend currently has 43 passing tests with 93% application-code coverage. They include
+cross-user list, detail, create, update, delete, and foreign-key isolation cases.
 
 ## Architecture
 
@@ -26,6 +33,24 @@ React SPA  --->  Django REST API  --->  PostgreSQL
 This is a modular monolith. Django apps will separate users, transactions, imports, categorization,
 and budgets while sharing one API deployment and one relational database. See
 [`docs/decisions`](docs/decisions) for the recorded tradeoffs.
+
+## Finance API
+
+All finance routes require authentication. Local development supports Django session and HTTP Basic
+authentication; production is deliberately closed until Cognito JWT authentication is configured.
+
+| Resource | Collection | Detail |
+| --- | --- | --- |
+| Accounts | `/api/v1/accounts/` | `/api/v1/accounts/{uuid}/` |
+| Categories | `/api/v1/categories/` | `/api/v1/categories/{uuid}/` |
+| Transactions | `/api/v1/transactions/` | `/api/v1/transactions/{uuid}/` |
+
+Transaction lists support `account`, `category`, `status`, `date_from`, and `date_to` query
+parameters. Results are paginated and sorted newest first.
+
+Money uses fixed-precision decimals. Positive transaction amounts are inflows, negative amounts are
+outflows, and zero is invalid. Current balances will be derived from each account's opening balance
+and posted transactions rather than stored as a second mutable value.
 
 ## Prerequisites
 
@@ -84,11 +109,10 @@ database engine.
 
 ## Next milestone
 
-Add the first complete transaction slice: financial accounts, categories, transactions, per-user
-query isolation, and a React transaction table backed by PostgreSQL.
+Add the authenticated React transaction ledger and creation workflow, then build synthetic CSV
+imports and deterministic categorization rules.
 
 ## Data policy
 
 Use only synthetic transaction data in development, tests, screenshots, and demonstrations. Never
 commit personal financial records or credentials.
-

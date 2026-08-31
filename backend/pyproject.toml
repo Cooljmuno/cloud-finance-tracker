@@ -28,6 +28,9 @@ addopts = "-ra --strict-config --strict-markers"
 python_files = ["test_*.py"]
 testpaths = ["apps", "tests"]
 
+[tool.coverage.run]
+omit = ["*/migrations/*", "*/tests/*"]
+
 [tool.ruff]
 extend-exclude = ["**/migrations/*.py"]
 line-length = 100

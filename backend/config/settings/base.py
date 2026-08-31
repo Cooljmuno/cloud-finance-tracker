@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "apps.core",
+    "apps.finance",
     "apps.users",
 ]
 
@@ -98,6 +99,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
