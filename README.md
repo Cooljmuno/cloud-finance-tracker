@@ -15,7 +15,7 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
 - Designed a modular monolith with a React client, versioned Django REST API, and transactional
   PostgreSQL persistence.
 - Enforced per-user data isolation at the queryset and serializer boundaries, returning `404` for
-  cross-user identifiers to avoid leaking resource existence.
+  cross-user detail access and rejecting foreign account/category references with `400`.
 - Implemented two explicit authentication boundaries: CSRF-protected Django sessions locally and
   a production-mode Cognito OAuth 2.0/OpenID Connect integration with PKCE and verified RS256
   access tokens.
@@ -32,7 +32,7 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
 - Authenticated per-user CRUD APIs for financial accounts, categories, and transactions.
 - Deterministic synthetic fixtures with three accounts, ten categories, and 24 transactions.
 
-The current automated suite contains 70 Pytest tests, 11 Vitest tests, and 2 Playwright browser
+The current automated suite contains 73 Pytest tests, 11 Vitest tests, and 2 Playwright browser
 workflows. See [`docs/decisions`](docs/decisions) for the tradeoffs behind the architecture.
 
 ## Architecture
@@ -64,8 +64,9 @@ milestone.
 
 ## Finance API
 
-All finance routes require an authenticated user. Every queryset is scoped to `request.user`, and
-cross-user identifiers return `404` rather than revealing that another user's resource exists.
+All finance routes require an authenticated user. Every queryset is scoped to `request.user`.
+Accessing another user's resource returns `404`; submitting another user's account or category in
+a transaction payload returns `400`.
 
 | Resource | Collection | Detail |
 | --- | --- | --- |
@@ -80,14 +81,88 @@ Money is stored as a fixed-precision decimal. Positive transaction amounts are i
 amounts are outflows, and zero is invalid. Account balances will be derived from opening balances
 and posted transactions rather than stored as a second mutable value.
 
-## Run verification
+## Local development
 
-With Docker:
+Install Docker Desktop and Git, then start Docker Desktop. Apple Silicon is supported directly;
+do not force `linux/amd64`. Local use does not require an AWS account.
+
+From the repository root, copy the configuration on the first setup:
 
 ```bash
-docker compose exec backend pytest
-docker compose exec frontend npm test
+cp .env.example .env
 ```
+
+Keep an existing `.env` when returning to the project. Start the services and wait for their
+startup checks:
+
+```bash
+docker compose up --build -d --wait --wait-timeout 120
+docker compose exec backend python manage.py seed_demo_data
+```
+
+The seed command privately prompts for a password and creates the local username `portfolio-demo`,
+three accounts, ten categories, and 24 synthetic transactions. Sign in at
+<http://localhost:5173> with that username and your chosen password.
+
+Check the complete local workflow:
+
+1. Sign in and confirm that the transaction ledger loads.
+2. Apply an account or category filter, then clear it.
+3. Add a synthetic transaction such as `Local verification` with amount `-12.34`; confirm it appears.
+4. Refresh the page, sign out, and confirm that the sign-in screen returns.
+
+The API and database health response is available at
+<http://localhost:8000/api/v1/health/>.
+
+### Returning to the project
+
+```bash
+docker compose up -d --wait --wait-timeout 120
+```
+
+Stop the services with `docker compose down`. PostgreSQL data remains in its named volume.
+
+To choose a new demo password:
+
+```bash
+docker compose exec backend python manage.py seed_demo_data --reset-password
+```
+
+Running the seed command again updates its fixtures without duplicating them. Its `--reset` option
+deletes all finance records belonging to the demo user, including manually added transactions,
+before recreating the synthetic fixtures.
+
+### Refreshing frontend dependencies
+
+After `frontend/package-lock.json` changes, refresh the dependencies stored in the development
+volume:
+
+```bash
+docker compose stop frontend
+docker compose run --rm --no-deps frontend npm ci
+docker compose up -d frontend
+```
+
+This leaves the PostgreSQL data volume intact.
+
+## Run verification
+
+With the local Docker services running, these checks do not require host installations of Python,
+`uv`, or Node.js:
+
+```bash
+docker compose exec backend ruff check .
+docker compose exec backend ruff format --check .
+docker compose exec backend python manage.py makemigrations --check --dry-run
+docker compose exec -e DJANGO_SETTINGS_MODULE=config.settings.test backend pytest
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm test
+docker compose exec frontend npm run build
+```
+
+The explicit test settings select the test authentication and database configuration instead of the
+development settings inherited from `.env`.
 
 Without Docker:
 
@@ -111,6 +186,9 @@ npm run test:e2e
 
 Playwright runs on the host or the Ubuntu GitHub Actions runner; the lightweight Alpine frontend
 development container is used for the app build and unit tests, not as a browser-test image.
+
+The Playwright workflows mock API responses to test browser behavior. The manual local workflow
+above verifies the running React client, Django API, session authentication, and PostgreSQL together.
 
 Pytest uses in-memory SQLite when PostgreSQL environment variables are absent. CI and Docker run
 the same suite against PostgreSQL so database behavior is still verified using the production
@@ -139,22 +217,6 @@ VITE_COGNITO_DOMAIN
 VITE_COGNITO_REDIRECT_URI
 VITE_COGNITO_LOGOUT_URI
 ```
-
-## Local development
-
-Prerequisites: Docker Desktop and Git. Docker Desktop supports Apple Silicon directly; do not force
-`linux/amd64`.
-
-```bash
-cp .env.example .env
-docker compose up --build -d
-docker compose exec backend python manage.py seed_demo_data
-```
-
-The seed command creates the fixed local username `portfolio-demo` and privately prompts for a
-password. It is idempotent and uses only synthetic data. Add `--reset` to rebuild the demo user's
-finance records or `--reset-password` to choose a new local password. Open
-<http://localhost:5173> after seeding.
 
 ## Next milestone
 
