@@ -19,6 +19,11 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must contain at least one host")
 
+COGNITO_REGION = required_env("COGNITO_REGION")
+COGNITO_USER_POOL_ID = required_env("COGNITO_USER_POOL_ID")
+COGNITO_APP_CLIENT_ID = required_env("COGNITO_APP_CLIENT_ID")
+COGNITO_ISSUER = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -45,3 +50,10 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,  # noqa: F405
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.users.authentication.CognitoJWTAuthentication",
+    ],
+}
