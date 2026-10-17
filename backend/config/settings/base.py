@@ -97,6 +97,18 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
+CORS_ALLOW_CREDENTIALS = False
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+
+# Local password authentication is deliberately opt-in. Production enables only
+# Cognito bearer-token authentication in production.py.
+ENABLE_LOCAL_AUTH = False
+ENABLE_DEMO_DATA = False
+ENABLE_DJANGO_ADMIN = False
+
+COGNITO_ISSUER = ""
+COGNITO_APP_CLIENT_ID = ""
+COGNITO_JWKS_CACHE_SECONDS = 3600
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
