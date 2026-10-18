@@ -7,8 +7,9 @@ resource "aws_db_parameter_group" "app" {
   name_prefix = "${local.name}-"
   family      = "postgres18"
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
   lifecycle {
     create_before_destroy = true

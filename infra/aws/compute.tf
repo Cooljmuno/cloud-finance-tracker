@@ -55,7 +55,8 @@ resource "aws_ecs_task_definition" "api" {
   }
 
   volume {
-    name = "tmp"
+    name                = "tmp"
+    configure_at_launch = false
   }
 
   container_definitions = jsonencode([{
@@ -65,7 +66,9 @@ resource "aws_ecs_task_definition" "api" {
     readonlyRootFilesystem = true
     portMappings           = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
     mountPoints            = [{ sourceVolume = "tmp", containerPath = "/tmp", readOnly = false }]
-    linuxParameters        = { capabilities = { drop = ["ALL"] } }
+    linuxParameters        = { capabilities = { add = [], drop = ["ALL"] } }
+    systemControls         = []
+    volumesFrom            = []
     environment = [
       { name = "DJANGO_SETTINGS_MODULE", value = "config.settings.production" },
       { name = "DJANGO_ALLOWED_HOSTS", value = aws_cloudfront_distribution.app.domain_name },

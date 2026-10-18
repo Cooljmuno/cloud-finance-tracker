@@ -1,6 +1,6 @@
 # ADR 0008: Reviewable AWS infrastructure and a separate release boundary
 
-- Status: Accepted for infrastructure preparation; live deployment pending
+- Status: Accepted; live API verified, user-reported demo complete, application cleanup verified
 - Date: 2026-10-18
 
 ## Context
@@ -11,10 +11,12 @@ infrastructure, and a release process that cannot quietly skip migrations or pub
 before its API is ready. A small project should avoid a custom domain requirement, a NAT gateway,
 and several independently deployed application services merely to look production-like.
 
-No AWS account credentials are configured for this milestone. Static validation, mocked Terraform
-tests, and stubbed deployment tests can verify the configuration and failure handling;
-they cannot prove account quotas, actual service integration, Cognito email delivery, a restore, or
-the final bill. Provisioning remains an explicit administrative step.
+This decision was initially reviewed without AWS credentials. Static validation, mocked Terraform
+tests, and stubbed deployment tests verify configuration and failure handling separately from a
+live account. The infrastructure was provisioned on October 18, 2026, and the first release completed.
+The [dated evidence record](../evidence/2026-10-18-aws-demo.md) distinguishes completed
+observations from pending integration, recovery, and billing checks. Provisioning remains an
+explicit administrative step.
 
 ## Decision
 
@@ -109,8 +111,8 @@ running task definition. The initial bootstrap tag is not expected to run.
 ### Recovery and operational limits
 
 Use encrypted Single-AZ RDS with seven-day automated backups, deletion protection, and a required
-final snapshot. Pin PostgreSQL major version `18` and enable managed minor updates rather than
-forcing the currently supported 18.6 patch after AWS upgrades it. Configure finite log retention
+final snapshot. Pin PostgreSQL major version `18` and enable managed minor updates. A major-only
+request uses AWS's default minor; the initial live instance selected 18.3. Configure finite log retention
 and basic ECS, ALB, and RDS alarms. Notification destinations are optional configuration and must
 be supplied and tested before claiming alerts
 reach anyone. A single task and Single-AZ database are cost-conscious portfolio defaults, not a
@@ -129,8 +131,10 @@ snapshots, nonempty buckets, log retention, and the separate state bucket.
 
 ## Consequences
 
-- The cloud design is reproducible and reviewable before a paid environment exists. Live rollout
-  and recovery validation remain visible follow-up work.
+- The cloud design can be reviewed before provisioning. The first paid environment has been
+  provisioned and released, and authenticated API checks passed. Hosted-UI/browser behavior was
+  not independently recorded. The application resources and final snapshot were removed after
+  the demo, with the state bucket retained. Recovery validation remains separate work.
 - Five Terraform tests use a globally mocked AWS provider. Four simulate plans; one simulates an
   apply to resolve the origin security-group lookup after its dependencies. That apply creates no
   real AWS resources and is separate from an administrator applying a live plan.

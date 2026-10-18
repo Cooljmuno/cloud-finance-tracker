@@ -7,9 +7,11 @@ engineering portfolio project. It uses synthetic transaction data to demonstrate
 workflows, database integrity, user isolation, automated tests, and reviewable AWS infrastructure.
 
 **Stack:** Python, Django REST Framework, React, TypeScript, PostgreSQL, AWS, Terraform, Docker,
-and GitHub Actions. The application runs locally. AWS infrastructure and a manual deployment
-workflow are prepared and tested without provisioning a cloud environment; there is no live AWS
-URL yet.
+and GitHub Actions. Local Docker remains the normal development environment. A temporary AWS
+showcase completed its first GitHub release and passed live HTTPS and authenticated API checks.
+The application environment and final database snapshot were removed after the demo; the
+remote-state bucket is retained and can incur storage charges. See the
+[dated AWS evidence record](docs/evidence/2026-10-18-aws-demo.md).
 
 ## Engineering highlights
 
@@ -28,7 +30,7 @@ URL yet.
   and currency-scoped reports calculated from posted transactions.
 - Gated changes with linting, type checking, migrations checks, unit and API tests, browser
   workflows, and container builds in GitHub Actions.
-- Prepared Terraform-managed CloudFront, private S3, ECS Fargate, private RDS, and Cognito, with
+- Provisioned Terraform-managed CloudFront, private S3, ECS Fargate, private RDS, and Cognito, with
   exact-subject GitHub OIDC trust and deployment permissions separate from infrastructure admin.
 - Ordered deployment around an immutable backend image, a successful migration task, a verified
   ECS rollout, and publishing the frontend entry point last.
@@ -61,7 +63,7 @@ transactions have been deleted. Categories referenced by rules or budgets must a
 instead of deleted.
 
 The current application suite contains 228 Pytest tests, 44 Vitest tests, and 2 Playwright browser
-workflows. Infrastructure verification adds 41 Python standard-library tests for deployment and
+workflows. Infrastructure verification adds 44 Python standard-library tests for deployment and
 bootstrap safeguards, plus 5 Terraform mock tests. Every Terraform test replaces the AWS provider:
 four run simulated plans and one runs a simulated apply to resolve dependent mock values. None
 creates real AWS resources. See [`docs/decisions`](docs/decisions) for the architecture tradeoffs.
@@ -86,7 +88,7 @@ the product requires it.
 | Environment | Browser sign-in | API authentication | Security boundary |
 | --- | --- | --- | --- |
 | Local | Django username/password | HttpOnly session cookie + CSRF token | Local auth routes and admin are enabled |
-| Production mode (not yet deployed) | Cognito hosted UI using OAuth code + PKCE | RS256 Cognito access token | Local password routes and Django admin are not registered |
+| Production configuration | Cognito hosted UI using OAuth code + PKCE | RS256 Cognito access token | Local password routes and Django admin are not registered |
 
 Production settings fail at startup unless the Cognito region, user-pool ID, and public app-client
 ID are configured. The frontend sends the access token to the API. Terraform creates the user pool,
@@ -94,7 +96,7 @@ public app client, and hosted domain when an administrator explicitly provisions
 The local demo username and password belong only to the local database; a deployed Cognito user
 signs up and verifies an email separately.
 
-### Prepared AWS topology
+### AWS topology
 
 ```mermaid
 flowchart TD
@@ -444,9 +446,10 @@ verified database TLS settings, and bootstrap guards. The database bootstrap was
 twice against an isolated local PostgreSQL 18.6 instance using a nonsuperuser administrator with
 role-creation permission; the resulting application login could not create roles. The production
 image was checked with a nonroot user, a read-only root filesystem, and writable temporary storage.
-These local checks do not substitute for a real RDS or ECS deployment.
+These local checks do not substitute for live integration checks. The
+[AWS evidence record](docs/evidence/2026-10-18-aws-demo.md) tracks cloud observations separately.
 
-Run the 41 deployment/bootstrap script tests without AWS credentials:
+Run the 44 deployment/bootstrap script tests without AWS credentials:
 
 ```bash
 python3 -m unittest discover -s scripts/aws/tests -v
@@ -483,7 +486,7 @@ VITE_COGNITO_REDIRECT_URI
 VITE_COGNITO_LOGOUT_URI
 ```
 
-## AWS preparation and next step
+## AWS showcase status and operations
 
 The repository now includes two Terraform roots: [`infra/bootstrap`](infra/bootstrap) for the
 remote-state bucket and [`infra/aws`](infra/aws) for the application environment. Both use pinned
@@ -497,11 +500,18 @@ Local Docker remains the default. For a cloud showcase once or twice a year, use
 environment, demonstrate it, then complete cleanup. The light-use estimate is $2–$5 per demo day
 before tax and retained storage, with no hard spending cap or automatic deletion.
 
-The next operational step is to choose an AWS account and budget, configure temporary admin access,
-review a real Terraform plan, then provision and rehearse the first deployment using the
-[deployment runbook](docs/deployment.md). No AWS resources have been provisioned by this milestone.
-Runtime recovery, Cognito signup, and billing must be checked in that real environment before
-describing it as deployed.
+On October 18, 2026, the two Terraform roots were applied in Ohio, the restricted application
+database login was bootstrapped, and the GitHub release passed OIDC authentication, image
+publication, and migrations. An HTTPS health request reached Django and PostgreSQL successfully.
+The first release completed, including frontend publication and CloudFront invalidation.
+An automated cloud harness passed 54 checks across 81 finance API requests, using Cognito SRP
+authentication for two synthetic identities. After the user reported completing the demo,
+cleanup was verified at 20:55:51 UTC: all 64 application resources were destroyed and the final
+database snapshot was deleted. The retained state bucket remains billable. The
+[evidence record](docs/evidence/2026-10-18-aws-demo.md) includes the full check labels and retained
+resource inventory. Hosted-UI/email/browser behavior was not independently recorded. Use the
+[runbook](docs/deployment.md) for repeat launches and cleanup. Backup restore, rollback recovery,
+alarm delivery, and actual billing have not been verified by these observations.
 
 ## Data policy
 
