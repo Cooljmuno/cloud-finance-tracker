@@ -1,0 +1,7 @@
+transaction_date,description,amount,status,notes
+2026-10-01,Synthetic Paycheck,2400.00,posted,Synthetic salary deposit
+2026-10-02,"Market Basket, North Store",-54.28,posted,Synthetic groceries
+2026-10-03,Campus Coffee,-4.75,,
+2026-10-04,City Transit,-18.00,pending,Synthetic transit pass
+2026-10-05,Book Refund,12.50,posted,
+2026-10-06,Streaming Subscription,-9.99,,Synthetic monthly subscription

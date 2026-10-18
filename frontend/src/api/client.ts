@@ -1,8 +1,6 @@
 import { appConfig } from "../config";
 
-export type AuthTransport =
-  | { mode: "session" }
-  | { mode: "cognito"; accessToken: string };
+export type AuthTransport = { mode: "session" } | { mode: "cognito"; accessToken: string };
 
 type ErrorBody = Record<string, unknown> | unknown[] | string | null;
 
@@ -94,7 +92,7 @@ export async function requestJson<T>(
   const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
-  if (options.body && !headers.has("Content-Type")) {
+  if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 

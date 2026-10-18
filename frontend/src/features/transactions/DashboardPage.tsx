@@ -26,6 +26,7 @@ import type {
   TransactionFilters as Filters,
 } from "../../api/types";
 import { useAppAuth } from "../../auth/AuthContext";
+import { ImportPanel } from "../imports/ImportPanel";
 import { AccountManager } from "../resources/AccountManager";
 import { CategoryManager } from "../resources/CategoryManager";
 import { TransactionFilters } from "./TransactionFilters";
@@ -40,7 +41,7 @@ const emptyFilters: Filters = {
   dateTo: "",
 };
 
-type WorkspaceView = "Transactions" | "Accounts" | "Categories";
+type WorkspaceView = "Transactions" | "Accounts" | "Categories" | "Imports";
 
 export function DashboardPage() {
   const { user, transport, signOut, invalidate } = useAppAuth();
@@ -304,7 +305,7 @@ export function DashboardPage() {
       </header>
 
       <nav className="workspace-nav" aria-label="Workspace">
-        {(["Transactions", "Accounts", "Categories"] as const).map((item) => (
+        {(["Transactions", "Accounts", "Categories", "Imports"] as const).map((item) => (
           <button
             key={item}
             type="button"
@@ -320,21 +321,27 @@ export function DashboardPage() {
       <section className="dashboard-intro">
         <div>
           <p className="eyebrow">
-            {view === "Transactions" ? "Transaction workspace" : "Workspace settings"}
+            {view === "Transactions" || view === "Imports"
+              ? "Transaction workspace"
+              : "Workspace settings"}
           </p>
           <h1>
             {view === "Transactions"
               ? "Know where the money moves."
               : view === "Accounts"
                 ? "Accounts that fit your life."
-                : "Give every entry context."}
+                : view === "Imports"
+                  ? "Bring your transactions together."
+                  : "Give every entry context."}
           </h1>
           <p>
             {view === "Transactions"
               ? "Review, organize, and update your transaction history."
               : view === "Accounts"
                 ? "Create accounts, edit their details, and archive the ones you no longer use."
-                : "Organize expenses, income, and transfers with categories you control."}
+                : view === "Imports"
+                  ? "Check a CSV, review its rows, and import it into one of your accounts."
+                  : "Organize expenses, income, and transfers with categories you control."}
           </p>
         </div>
         {view === "Transactions" ? (
@@ -426,6 +433,19 @@ export function DashboardPage() {
           onUpdate={changeCategory}
           onDelete={removeCategory}
         />
+      ) : view === "Imports" && resourcesReady ? (
+        <ImportPanel
+          accounts={accounts}
+          onBusyChange={setMutationBusy}
+          onImported={(batch, duplicate) => {
+            setPage(1);
+            refreshLedger(
+              duplicate
+                ? "This file was already imported. No transactions were added."
+                : `Imported ${batch.row_count} transactions into ${batch.account_name}.`,
+            );
+          }}
+        />
       ) : view !== "Transactions" && !resourceError ? (
         <p className="loading-state">Loading your workspace…</p>
       ) : null}
@@ -507,7 +527,9 @@ export function DashboardPage() {
                 <p className="card-kicker">Newest first</p>
                 <h2 id="ledger-heading">Transaction ledger</h2>
               </div>
-              <span>{ledger?.count ?? 0} {ledger?.count === 1 ? "result" : "results"}</span>
+              <span>
+                {ledger?.count ?? 0} {ledger?.count === 1 ? "result" : "results"}
+              </span>
             </div>
             <TransactionFilters
               accounts={accounts}

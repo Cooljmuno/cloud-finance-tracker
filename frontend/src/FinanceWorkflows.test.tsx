@@ -33,6 +33,7 @@ const transaction: FinanceTransaction = {
   currency: "USD",
   category: category.id,
   category_name: category.name,
+  import_batch: null,
   transaction_date: "2026-08-29",
   description: "Juniper Market",
   amount: "-86.24",

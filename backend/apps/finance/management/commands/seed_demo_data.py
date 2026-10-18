@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as database_transaction
 from django.utils import timezone
 
-from apps.finance.models import Category, FinancialAccount, Transaction
+from apps.finance.models import Category, FinancialAccount, ImportBatch, Transaction
 
 DEMO_USERNAME = "portfolio-demo"
 DEMO_EMAIL = "demo@local.invalid"
@@ -163,6 +163,7 @@ class Command(BaseCommand):
 
             if options["reset"]:
                 Transaction.objects.filter(owner=user).delete()
+                ImportBatch.objects.filter(owner=user).delete()
                 Category.objects.filter(owner=user).delete()
                 FinancialAccount.objects.filter(owner=user).delete()
 

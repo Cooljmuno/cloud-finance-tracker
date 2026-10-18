@@ -7,7 +7,7 @@ from django.core.management import CommandError, call_command
 from django.test import override_settings
 
 from apps.finance.management.commands.seed_demo_data import DEMO_USERNAME, fixture_id
-from apps.finance.models import Category, FinancialAccount, Transaction
+from apps.finance.models import Category, FinancialAccount, ImportBatch, Transaction
 
 pytestmark = pytest.mark.django_db
 
@@ -65,11 +65,36 @@ def test_reset_is_scoped_to_demo_user(monkeypatch):
         name="Temporary demo account",
         account_type="cash",
     )
+    demo_batch = ImportBatch.objects.create(
+        owner=demo_user,
+        account=FinancialAccount.objects.filter(owner=demo_user).first(),
+        file_name="demo-import.csv",
+        file_hash="a" * 64,
+        row_count=1,
+    )
+    Transaction.objects.create(
+        owner=demo_user,
+        account=demo_batch.account,
+        import_batch=demo_batch,
+        transaction_date=date(2026, 8, 31),
+        description="Imported synthetic record",
+        amount="-8.50",
+    )
+    other_batch = ImportBatch.objects.create(
+        owner=other_user,
+        account=other_account,
+        file_name="other-import.csv",
+        file_hash="b" * 64,
+        row_count=1,
+    )
 
     seed(monkeypatch, "--as-of", "2026-08-31", "--reset")
 
     assert FinancialAccount.objects.filter(owner=demo_user).count() == 3
     assert FinancialAccount.objects.filter(pk=other_account.pk).exists()
+    assert Transaction.objects.filter(owner=demo_user).count() == 24
+    assert not ImportBatch.objects.filter(pk=demo_batch.pk).exists()
+    assert ImportBatch.objects.filter(pk=other_batch.pk).exists()
 
 
 def test_invalid_reference_date_is_rejected(monkeypatch):

@@ -1,9 +1,10 @@
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models.deletion import RestrictedError
 from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 
 from .models import Category, FinancialAccount, Transaction
@@ -34,16 +35,32 @@ class FinancialAccountViewSet(OwnerViewSet):
     serializer_class = FinancialAccountSerializer
 
     def perform_destroy(self, instance):
-        if instance.transactions.exists():
-            raise Conflict(
-                "Accounts with transactions cannot be deleted; mark the account inactive."
+        with transaction.atomic():
+            instance = (
+                FinancialAccount.objects.select_for_update()
+                .filter(
+                    pk=instance.pk,
+                    owner=self.request.user,
+                )
+                .first()
             )
-        try:
-            instance.delete()
-        except RestrictedError as error:
-            raise Conflict(
-                "Accounts with transactions cannot be deleted; mark the account inactive."
-            ) from error
+            if instance is None:
+                raise NotFound()
+            if instance.transactions.exists():
+                raise Conflict(
+                    "Accounts with transactions cannot be deleted; mark the account inactive."
+                )
+            if instance.import_batches.exists():
+                raise Conflict(
+                    "Accounts with import history cannot be deleted; archive the account instead."
+                )
+            try:
+                instance.delete()
+            except RestrictedError as error:
+                raise Conflict(
+                    "Accounts with financial history cannot be deleted; "
+                    "archive the account instead."
+                ) from error
 
 
 class CategoryViewSet(OwnerViewSet):

@@ -3,7 +3,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import serializers
 
-from .models import Category, FinancialAccount, Transaction
+from .models import Category, FinancialAccount, ImportBatch, Transaction
 
 
 def normalize_name(value: str) -> str:
@@ -93,6 +93,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "currency",
             "category",
             "category_name",
+            "import_batch",
             "transaction_date",
             "description",
             "amount",
@@ -106,6 +107,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "account_name",
             "currency",
             "category_name",
+            "import_batch",
             "created_at",
             "updated_at",
         ]
@@ -139,3 +141,20 @@ class TransactionSerializer(serializers.ModelSerializer):
         if value == 0:
             raise serializers.ValidationError("Amount must be nonzero.")
         return value
+
+
+class ImportBatchSerializer(serializers.ModelSerializer):
+    account_name = serializers.CharField(source="account.name", read_only=True)
+
+    class Meta:
+        model = ImportBatch
+        fields = [
+            "id",
+            "account",
+            "account_name",
+            "file_name",
+            "file_hash",
+            "row_count",
+            "created_at",
+        ]
+        read_only_fields = fields

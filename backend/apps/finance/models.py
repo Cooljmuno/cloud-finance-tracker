@@ -2,7 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models.functions import Lower
 
@@ -45,7 +45,13 @@ class TransactionQuerySet(OwnerImmutableQuerySet):
         "account_id",
         "category",
         "category_id",
+        "import_batch",
+        "import_batch_id",
     }
+
+
+class ImportBatchQuerySet(OwnerImmutableQuerySet):
+    ownership_fields = OwnerImmutableQuerySet.ownership_fields | {"account", "account_id"}
 
 
 class OwnerImmutableModel(models.Model):
@@ -112,6 +118,53 @@ class FinancialAccount(OwnerImmutableModel):
         return self.name
 
 
+class ImportBatch(OwnerImmutableModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="import_batches",
+    )
+    account = models.ForeignKey(
+        FinancialAccount,
+        on_delete=models.RESTRICT,
+        related_name="import_batches",
+    )
+    file_name = models.CharField(max_length=255)
+    file_hash = models.CharField(
+        max_length=64,
+        validators=[RegexValidator(regex=r"^[0-9a-f]{64}$", message="Use a SHA-256 file hash.")],
+    )
+    row_count = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = ImportBatchQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "file_hash"],
+                name="unique_import_file_per_account",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(row_count__gt=0),
+                name="import_row_count_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["owner", "-created_at"], name="import_owner_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return self.file_name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.owner_id and self.account_id and self.account.owner_id != self.owner_id:
+            raise ValidationError({"account": "Account must belong to the import owner."})
+
+
 class Category(OwnerImmutableModel):
     class Kind(models.TextChoices):
         EXPENSE = "expense", "Expense"
@@ -172,6 +225,13 @@ class Transaction(OwnerImmutableModel):
         null=True,
         blank=True,
     )
+    import_batch = models.ForeignKey(
+        ImportBatch,
+        on_delete=models.SET_NULL,
+        related_name="transactions",
+        null=True,
+        blank=True,
+    )
     transaction_date = models.DateField()
     description = models.CharField(max_length=255)
     amount = models.DecimalField(
@@ -221,6 +281,9 @@ class Transaction(OwnerImmutableModel):
 
         if self.owner_id and self.category_id and self.category.owner_id != self.owner_id:
             errors["category"] = "Category must belong to the transaction owner."
+
+        if self.owner_id and self.import_batch_id and self.import_batch.owner_id != self.owner_id:
+            errors["import_batch"] = "Import batch must belong to the transaction owner."
 
         if errors:
             raise ValidationError(errors)
