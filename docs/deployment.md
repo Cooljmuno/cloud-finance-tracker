@@ -33,6 +33,43 @@ delivery. A notification is not a hard spending cap; usage can continue after a 
 does not configure an account-wide billing budget. Stopping only ECS leaves the ALB, RDS, storage,
 and other resources present. Use the cleanup procedure when the showcase is finished.
 
+### Occasional AWS demos
+
+Keep local Docker as the normal development and demonstration environment; it creates no AWS
+bill. For an AWS showcase once or twice a year, create the complete cloud environment for a
+limited window, demonstrate it, then perform the [complete cleanup](#cleanup-and-retained-charges).
+The cloud URL is available only while that environment exists. No automatic shutdown or deletion
+is configured.
+
+An October 2026 Ohio (`us-east-2`) estimate for the configured small environment is about
+`$44.165 / 730 hours × 24 hours = $1.45` in base charges for one day. That base includes one
+0.25-vCPU/0.5-GiB task, the ALB, `db.t4g.micro`, 20 GiB of database storage, one public task IPv4
+address, two secrets, and three alarms. The rates come from the regional AWS price catalogs for
+[ECS][price-ecs], [ALB][price-alb], [RDS][price-rds], [secrets][price-secrets],
+[CloudWatch][price-cloudwatch], and [public IPv4][price-ipv4]. Allow roughly **$2–$5 for a light-use
+demo day**, before tax and retained storage. This is an estimate with a usage buffer, not a cap;
+traffic, build/migration tasks, logs, storage, or a longer running window can increase it. Review
+current rates and the actual plan before each launch.
+
+Use the existing setup and cleanup steps in this order:
+
+1. Review the plan and cost for the chosen window, provision, bootstrap, deploy, and verify the
+   app. On repeat launches, reuse the retained state bucket rather than creating it again.
+2. After demonstrating synthetic data, complete the cleanup procedure. Stopping the app or
+   setting ECS to zero does not remove the ALB or RDS costs. Check for retained snapshots, S3
+   object versions, and state storage, which can remain billable between demonstrations.
+3. Before the next launch, set `deletion_protection = true` again and choose a fresh unique
+   `final_snapshot_identifier`. Recreate and verify the cloud workspace; reexport
+   `deployment-config.json` and replace GitHub's `AWS_DEPLOYMENT_CONFIG`. New CloudFront and
+   Cognito resources can have new URLs and IDs, and previous Cognito users are not recreated
+   automatically. Build the frontend using the new settings.
+
+The application secret has a 30-day deletion recovery window. AWS does not charge for a secret
+[marked for deletion][secret-delete], but its name remains unavailable for immediate recreation.
+For a quick repeat launch, wait for deletion to finish or review a distinct `project_name`; do not
+assume an immediate same-name rebuild will work. Retained snapshots and state are separate from
+this secret recovery window and still need a retention decision.
+
 ## 2. Configure temporary administrator access
 
 Install Git, Docker Desktop, Python 3.11 or later, AWS CLI v2, and the exact Terraform version
@@ -459,3 +496,10 @@ verification above.
 [rds-delete]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_DeleteInstance.html
 [rds-versions]: https://docs.aws.amazon.com/AmazonRDS/latest/PostgreSQLReleaseNotes/postgresql-versions.html
 [ecs-rollback]: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-circuit-breaker.html
+[secret-delete]: https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_delete-secret.html
+[price-ecs]: https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/us-east-2/index.json
+[price-alb]: https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-2/index.json
+[price-rds]: https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-2/index.json
+[price-secrets]: https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/current/us-east-2/index.json
+[price-cloudwatch]: https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/us-east-2/index.json
+[price-ipv4]: https://aws.amazon.com/vpc/pricing/

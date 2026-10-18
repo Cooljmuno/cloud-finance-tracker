@@ -1,5 +1,6 @@
 import copy
 import json
+import stat
 import subprocess
 import sys
 import tempfile
@@ -127,34 +128,95 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(DeploymentError):
                 validate_config({**self.config, key: value})
 
-    def test_aws_payload_uses_stdin_and_errors_hide_secret_values(self):
+    def assert_private_request(self, command, kwargs, payload):
+        uri = command[command.index("--cli-input-json") + 1]
+        self.assertTrue(uri.startswith("file:///"))
+        self.assertNotEqual(uri, "file:///dev/stdin")
+        request = Path(uri.removeprefix("file://"))
+        self.assertEqual(stat.S_IMODE(request.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(request.parent.stat().st_mode), 0o700)
+        self.assertEqual(json.loads(request.read_text()), payload)
+        self.assertNotIn("input", kwargs)
+        self.assertNotIn(payload["SecretString"], " ".join(command))
+        return request
+
+    def test_aws_payload_uses_closed_private_file_and_deletes_it_after_success(self):
         secret = "synthetic-private-secret"
-        with patch(
-            "common.subprocess.run",
-            return_value=subprocess.CompletedProcess([], 0, '{"ok":true}', ""),
-        ) as command:
+        payload = {"SecretString": secret}
+        paths = []
+        writers = []
+        temporary_file = tempfile.NamedTemporaryFile
+
+        def track_writer(*args, **kwargs):
+            writer = temporary_file(*args, **kwargs)
+            writers.append(writer)
+            return writer
+
+        def run(command, **kwargs):
+            paths.append(self.assert_private_request(command, kwargs, payload))
+            self.assertTrue(all(writer.closed for writer in writers))
+            return subprocess.CompletedProcess(command, 0, '{"ok":true}', "")
+
+        with (
+            patch("common.tempfile.NamedTemporaryFile", side_effect=track_writer),
+            patch("common.subprocess.run", side_effect=run),
+        ):
             self.assertEqual(
-                AwsCli("us-east-2").run(
-                    "secretsmanager", "put-secret-value", payload={"SecretString": secret}
-                ),
+                AwsCli("us-east-2").run("secretsmanager", "put-secret-value", payload=payload),
                 {"ok": True},
             )
-        args, kwargs = command.call_args
-        self.assertNotIn(secret, " ".join(args[0]))
-        self.assertEqual(json.loads(kwargs["input"]), {"SecretString": secret})
-        self.assertEqual(args[0][-2:], ["--cli-input-json", "file:///dev/stdin"])
-        with patch(
-            "common.subprocess.run",
-            return_value=subprocess.CompletedProcess(
-                [], 1, "", f"An error occurred (AccessDeniedException) secret={secret}"
-            ),
-        ):
+        self.assertEqual(len(paths), 1)
+        self.assertFalse(paths[0].exists())
+        self.assertFalse(paths[0].parent.exists())
+
+    def test_aws_error_deletes_private_payload_and_hides_secret_values(self):
+        secret = "synthetic-private-secret"
+        payload = {"SecretString": secret}
+        paths = []
+
+        def run(command, **kwargs):
+            paths.append(self.assert_private_request(command, kwargs, payload))
+            return subprocess.CompletedProcess(
+                command, 1, "", f"An error occurred (AccessDeniedException) secret={secret}"
+            )
+
+        with patch("common.subprocess.run", side_effect=run):
             with self.assertRaises(AwsCommandError) as raised:
-                AwsCli("us-east-2").run(
-                    "secretsmanager", "put-secret-value", payload={"SecretString": secret}
-                )
+                AwsCli("us-east-2").run("secretsmanager", "put-secret-value", payload=payload)
         self.assertNotIn(secret, str(raised.exception))
         self.assertEqual(raised.exception.error_code, "AccessDeniedException")
+        self.assertFalse(paths[0].exists())
+        self.assertFalse(paths[0].parent.exists())
+
+    def test_spawn_error_deletes_private_payload_and_hides_secret_values(self):
+        secret = "synthetic-private-secret"
+        payload = {"SecretString": secret}
+        paths = []
+
+        def run(command, **kwargs):
+            paths.append(self.assert_private_request(command, kwargs, payload))
+            raise OSError(f"Cannot start process: {secret}")
+
+        with patch("common.subprocess.run", side_effect=run):
+            with self.assertRaises(DeploymentError) as raised:
+                AwsCli("us-east-2").run("secretsmanager", "put-secret-value", payload=payload)
+        self.assertNotIn(secret, str(raised.exception))
+        self.assertFalse(paths[0].exists())
+        self.assertFalse(paths[0].parent.exists())
+
+    def test_invalid_json_response_leaves_no_private_payload(self):
+        payload = {"SecretString": "synthetic-private-secret"}
+        paths = []
+
+        def run(command, **kwargs):
+            paths.append(self.assert_private_request(command, kwargs, payload))
+            return subprocess.CompletedProcess(command, 0, "invalid JSON", "")
+
+        with patch("common.subprocess.run", side_effect=run):
+            with self.assertRaises(DeploymentError):
+                AwsCli("us-east-2").run("secretsmanager", "put-secret-value", payload=payload)
+        self.assertFalse(paths[0].exists())
+        self.assertFalse(paths[0].parent.exists())
 
     def test_high_level_s3_output_is_not_parsed_as_json(self):
         with patch(
