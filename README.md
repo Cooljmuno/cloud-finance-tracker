@@ -4,11 +4,12 @@
 
 A security-focused, full-stack finance application built as a production-shaped software
 engineering portfolio project. It uses synthetic transaction data to demonstrate authenticated
-workflows, database integrity, user isolation, automated tests, and a design intended for a later
-AWS deployment.
+workflows, database integrity, user isolation, automated tests, and reviewable AWS infrastructure.
 
-**Stack:** Python, Django REST Framework, React, TypeScript, PostgreSQL, Docker, and GitHub Actions.
-AWS infrastructure and Terraform deployment are planned for a later milestone.
+**Stack:** Python, Django REST Framework, React, TypeScript, PostgreSQL, AWS, Terraform, Docker,
+and GitHub Actions. The application runs locally. AWS infrastructure and a manual deployment
+workflow are prepared and tested without provisioning a cloud environment; there is no live AWS
+URL yet.
 
 ## Engineering highlights
 
@@ -27,6 +28,10 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
   and currency-scoped reports calculated from posted transactions.
 - Gated changes with linting, type checking, migrations checks, unit and API tests, browser
   workflows, and container builds in GitHub Actions.
+- Prepared Terraform-managed CloudFront, private S3, ECS Fargate, private RDS, and Cognito, with
+  exact-subject GitHub OIDC trust and deployment permissions separate from infrastructure admin.
+- Ordered deployment around an immutable backend image, a successful migration task, a verified
+  ECS rollout, and publishing the frontend entry point last.
 
 ## Product capabilities
 
@@ -55,15 +60,18 @@ archiving it. Accounts with an import receipt also require archiving, even after
 transactions have been deleted. Categories referenced by rules or budgets must also be archived
 instead of deleted.
 
-The current automated suite contains 198 Pytest tests, 44 Vitest tests, and 2 Playwright browser
-workflows. See [`docs/decisions`](docs/decisions) for the tradeoffs behind the architecture.
+The current application suite contains 228 Pytest tests, 44 Vitest tests, and 2 Playwright browser
+workflows. Infrastructure verification adds 41 Python standard-library tests for deployment and
+bootstrap safeguards, plus 5 Terraform mock tests. Every Terraform test replaces the AWS provider:
+four run simulated plans and one runs a simulated apply to resolve dependent mock values. None
+creates real AWS resources. See [`docs/decisions`](docs/decisions) for the architecture tradeoffs.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     SPA[React SPA] -->|session + CSRF locally| API[Django REST API]
-    SPA -->|planned production: code + PKCE| Cognito[Amazon Cognito]
+    SPA -->|production mode: code + PKCE| Cognito[Amazon Cognito]
     SPA -->|Bearer access token| API
     API -->|verify JWKS + claims| Cognito
     API --> DB[(PostgreSQL)]
@@ -81,9 +89,35 @@ the product requires it.
 | Production mode (not yet deployed) | Cognito hosted UI using OAuth code + PKCE | RS256 Cognito access token | Local password routes and Django admin are not registered |
 
 Production settings fail at startup unless the Cognito region, user-pool ID, and public app-client
-ID are configured. The frontend sends the access token—not the ID token—to the API. The AWS
-infrastructure that creates the user pool and hosted domain will be added in the deployment
-milestone.
+ID are configured. The frontend sends the access token to the API. Terraform creates the user pool,
+public app client, and hosted domain when an administrator explicitly provisions the environment.
+The local demo username and password belong only to the local database; a deployed Cognito user
+signs up and verifies an email separately.
+
+### Prepared AWS topology
+
+```mermaid
+flowchart TD
+    Browser[Browser] -->|HTTPS| Edge[CloudFront]
+    Edge -->|OAC| Static[Private S3]
+    Edge -->|VPC origin HTTP| ALB[Internal ALB]
+    ALB -->|HTTP 8000| API[ECS Fargate]
+    API -->|TLS verify-full| DB[(Private RDS)]
+    Browser -->|Code and PKCE| Auth[Cognito]
+    API -->|JWKS over HTTPS| Auth
+```
+
+One CloudFront hostname serves the client and `/api/*`, so an initial deployment needs no purchased
+domain or custom ACM certificate. TLS terminates at CloudFront; the internal ALB and task connection
+uses private HTTP, while PostgreSQL verifies the RDS certificate and hostname. This is not
+end-to-end TLS. Tasks have public IP addresses for outbound HTTPS without a NAT gateway, but their
+security group accepts application traffic only from the internal ALB. RDS accepts database
+connections only from the task security group.
+
+See the [deployment runbook](docs/deployment.md) for account setup, cost review, state and secret
+bootstrap, manual deployment, rollback limits, and cleanup. Infrastructure applies and cloud
+deployment require an intentionally configured AWS account; passing mocked infrastructure tests
+does not verify a live account, email delivery, or a real AWS rollout.
 
 ## Finance API
 
@@ -258,7 +292,7 @@ three accounts, ten categories, and 24 synthetic transactions. Sign in at
 
 Existing local users continue signing in with their existing credentials. The empty-workspace flow
 starts after authentication: a user with no finance records can create an account and categories
-through the UI. This also supports newly provisioned Cognito profiles when AWS deployment is added.
+through the UI. This also supports newly provisioned Cognito profiles after AWS deployment.
 Local registration has not been added; the documented demo setup remains the simplest local start.
 
 Check the complete local workflow:
@@ -405,6 +439,22 @@ budget constraints, signed refunds and income adjustments, excluded transfers an
 currency isolation, and zero-filled trends. The manual rules and planning workflow above checks
 those product boundaries through the running application.
 
+Production tests cover host and protocol validation, the narrow private health-check exception,
+verified database TLS settings, and bootstrap guards. The database bootstrap was also rehearsed
+twice against an isolated local PostgreSQL 18.6 instance using a nonsuperuser administrator with
+role-creation permission; the resulting application login could not create roles. The production
+image was checked with a nonroot user, a read-only root filesystem, and writable temporary storage.
+These local checks do not substitute for a real RDS or ECS deployment.
+
+Run the 41 deployment/bootstrap script tests without AWS credentials:
+
+```bash
+python3 -m unittest discover -s scripts/aws/tests -v
+```
+
+The [deployment runbook](docs/deployment.md#verification-without-an-aws-account) gives commands for
+the five Terraform mock tests using backend-disabled initialization and the committed locks.
+
 Pytest uses in-memory SQLite when PostgreSQL environment variables are absent. CI and Docker run
 the same suite against PostgreSQL so database behavior is still verified using the production
 database engine.
@@ -433,12 +483,20 @@ VITE_COGNITO_REDIRECT_URI
 VITE_COGNITO_LOGOUT_URI
 ```
 
-## Next milestone
+## AWS preparation and next step
 
-Add Terraform-managed AWS infrastructure, operational observability, and deployment workflows.
-The planned topology uses S3 and CloudFront for the React client, ECS Fargate for Django, RDS for
-PostgreSQL, and Cognito for hosted authentication. These are deployment targets; the application
-has not yet been deployed to AWS.
+The repository now includes two Terraform roots: [`infra/bootstrap`](infra/bootstrap) for the
+remote-state bucket and [`infra/aws`](infra/aws) for the application environment. Both use pinned
+tooling and provider lock files. [`scripts/aws`](scripts/aws) contains administrative database
+bootstrap and deployment helpers; the manual GitHub deployment workflow uses OIDC rather than
+stored AWS access keys. CloudWatch logs and operational alarms are configured in Terraform;
+notifications require explicit action destinations.
+
+The next operational step is to choose an AWS account and budget, configure temporary admin access,
+review a real Terraform plan, then provision and rehearse the first deployment using the
+[deployment runbook](docs/deployment.md). No AWS resources have been provisioned by this milestone.
+Runtime recovery, Cognito signup, and billing must be checked in that real environment before
+describing it as deployed.
 
 ## Data policy
 

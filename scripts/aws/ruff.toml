@@ -1,0 +1,5 @@
+extend = "../../backend/pyproject.toml"
+target-version = "py311"
+
+[lint.per-file-ignores]
+"tests/*.py" = ["E402"]

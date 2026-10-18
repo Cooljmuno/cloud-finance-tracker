@@ -15,6 +15,17 @@ coverage/
 playwright-report/
 test-results/
 
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+backend.hcl
+deployment-config.json
+crash.log
+crash.*.log
+
 .idea/
 .vscode/
 

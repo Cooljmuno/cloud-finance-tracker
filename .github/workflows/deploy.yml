@@ -1,0 +1,82 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify successful CI for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/aws/check_ci.py --repository "$RELEASE_REPOSITORY" --sha "$RELEASE_SHA"
+
+      - name: Validate deployment configuration
+        id: config
+        env:
+          AWS_DEPLOYMENT_CONFIG: ${{ vars.AWS_DEPLOYMENT_CONFIG }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "scripts/aws")
+          from common import validate_config
+
+          config = validate_config(json.loads(os.environ["AWS_DEPLOYMENT_CONFIG"]))
+          path = Path(os.environ["RUNNER_TEMP"]) / "deployment-config.json"
+          path.write_text(json.dumps(config))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"path={path}\n")
+              output.write(f"region={config['aws_region']}\n")
+              output.write(f"account={config['aws_account_id']}\n")
+              output.write(f"role={config['github_deploy_role_arn']}\n")
+          PY
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24.19.0"
+
+      - name: Obtain short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ steps.config.outputs.region }}
+          role-to-assume: ${{ steps.config.outputs.role }}
+          allowed-account-ids: ${{ steps.config.outputs.account }}
+          role-session-name: finance-deploy-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Log in to the private image repository
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Migrate, roll out the API, and publish the frontend
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          DEPLOYMENT_CONFIG_PATH: ${{ steps.config.outputs.path }}
+        run: python3 scripts/aws/deploy.py --config "$DEPLOYMENT_CONFIG_PATH" --sha "$RELEASE_SHA"

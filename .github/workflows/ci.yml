@@ -44,8 +44,8 @@ jobs:
         with:
           version: "0.11.33"
       - run: uv sync --frozen
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
+      - run: uv run ruff check . ../scripts/aws
+      - run: uv run ruff format --check . ../scripts/aws
       - run: uv run python manage.py makemigrations --check --dry-run
       - run: uv run pytest --cov=apps --cov-report=term-missing
 
@@ -69,9 +69,36 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14.7"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      - name: Validate state bootstrap
+        working-directory: infra/bootstrap
+        run: |
+          terraform init -backend=false -lockfile=readonly -input=false
+          terraform validate
+          terraform test -no-color
+      - name: Validate application infrastructure
+        working-directory: infra/aws
+        run: |
+          terraform init -backend=false -lockfile=readonly -input=false
+          terraform validate
+          terraform test -no-color
+      - name: Verify deployment safeguards without AWS access
+        run: python -m unittest discover -s scripts/aws/tests -p 'test_*.py' -v
+
   containers:
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, frontend, infrastructure]
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker build --target production --tag finance-tracker-api:test backend

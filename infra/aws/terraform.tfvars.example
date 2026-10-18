@@ -1,0 +1,8 @@
+aws_region                 = "us-east-2"
+project_name               = "cloud-finance-tracker"
+environment                = "production"
+github_oidc_subject        = "repo:Cooljmuno@92428715/cloud-finance-tracker@1351595936:environment:production"
+github_oidc_provider_arn   = null
+final_snapshot_identifier = "finance-tracker-production-final-20261018"
+alarm_action_arns          = []
+deletion_protection        = true

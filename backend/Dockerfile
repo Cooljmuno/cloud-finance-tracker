@@ -22,13 +22,17 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 FROM base AS production
 
+ENV DJANGO_SETTINGS_MODULE=config.settings.production
+
 COPY . .
 
 RUN groupadd --system app && \
-    useradd --system --gid app --home-dir /app app && \
-    chown -R app:app /app
+    useradd --system --gid app --home-dir /app --no-create-home app && \
+    chmod 1777 /tmp
+
+VOLUME ["/tmp"]
 
 USER app
 
 EXPOSE 8000
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--access-logfile", "-"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60", "--graceful-timeout", "30", "--worker-tmp-dir", "/tmp", "--access-logfile", "-", "--access-logformat", "%(t)s %(m)s %(U)s %(s)s %(L)s", "--error-logfile", "-", "--capture-output", "--forwarded-allow-ips", ""]
