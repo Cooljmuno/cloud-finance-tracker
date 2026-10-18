@@ -7,7 +7,14 @@ from django.core.management import CommandError, call_command
 from django.test import override_settings
 
 from apps.finance.management.commands.seed_demo_data import DEMO_USERNAME, fixture_id
-from apps.finance.models import Category, FinancialAccount, ImportBatch, Transaction
+from apps.finance.models import (
+    CategorizationRule,
+    Category,
+    FinancialAccount,
+    ImportBatch,
+    MonthlyBudget,
+    Transaction,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -87,6 +94,36 @@ def test_reset_is_scoped_to_demo_user(monkeypatch):
         file_hash="b" * 64,
         row_count=1,
     )
+    demo_category = Category.objects.filter(owner=demo_user, kind=Category.Kind.EXPENSE).first()
+    other_category = Category.objects.create(
+        owner=other_user,
+        name="Other expenses",
+        kind=Category.Kind.EXPENSE,
+    )
+    demo_rule = CategorizationRule.objects.create(
+        owner=demo_user,
+        category=demo_category,
+        name="Temporary demo rule",
+        match_text="synthetic",
+    )
+    other_rule = CategorizationRule.objects.create(
+        owner=other_user,
+        category=other_category,
+        name="Other rule",
+        match_text="private",
+    )
+    demo_budget = MonthlyBudget.objects.create(
+        owner=demo_user,
+        category=demo_category,
+        month=date(2026, 8, 1),
+        amount="100.00",
+    )
+    other_budget = MonthlyBudget.objects.create(
+        owner=other_user,
+        category=other_category,
+        month=date(2026, 8, 1),
+        amount="50.00",
+    )
 
     seed(monkeypatch, "--as-of", "2026-08-31", "--reset")
 
@@ -95,6 +132,11 @@ def test_reset_is_scoped_to_demo_user(monkeypatch):
     assert Transaction.objects.filter(owner=demo_user).count() == 24
     assert not ImportBatch.objects.filter(pk=demo_batch.pk).exists()
     assert ImportBatch.objects.filter(pk=other_batch.pk).exists()
+    assert not CategorizationRule.objects.filter(pk=demo_rule.pk).exists()
+    assert not MonthlyBudget.objects.filter(pk=demo_budget.pk).exists()
+    assert CategorizationRule.objects.filter(pk=other_rule.pk, owner=other_user).exists()
+    assert MonthlyBudget.objects.filter(pk=other_budget.pk, owner=other_user).exists()
+    assert Category.objects.filter(pk=other_category.pk, owner=other_user).exists()
 
 
 def test_invalid_reference_date_is_rejected(monkeypatch):

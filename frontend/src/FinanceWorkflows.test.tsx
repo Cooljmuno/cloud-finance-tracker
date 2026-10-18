@@ -34,6 +34,9 @@ const transaction: FinanceTransaction = {
   category: category.id,
   category_name: category.name,
   import_batch: null,
+  category_source: "manual",
+  matched_rule: null,
+  matched_rule_name: null,
   transaction_date: "2026-08-29",
   description: "Juniper Market",
   amount: "-86.24",
@@ -313,7 +316,9 @@ describe("Finance workspace workflows", () => {
     });
     const request = api.mutations().find((item) => item.method === "PATCH");
     expect(request?.url.pathname).toContain(`/transactions/${transaction.id}/`);
-    expect(request?.body).toMatchObject({ account: account.id, category: category.id });
+    expect(request?.body).toMatchObject({ account: account.id });
+    expect(request?.body).not.toHaveProperty("category");
+    expect(request?.body).not.toHaveProperty("category_mode");
   });
 
   it("cancels deletion, retains a transaction after failure, then removes it after a successful retry", async () => {

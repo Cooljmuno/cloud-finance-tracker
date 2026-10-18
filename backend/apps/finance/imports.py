@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from .csv_parser import MAX_DATA_ROWS as MAX_DATA_ROWS
 from .csv_parser import MAX_FILE_BYTES, parse_csv
 from .models import FinancialAccount, ImportBatch, Transaction
+from .planning import active_rules, assign_category
 from .serializers import ImportBatchSerializer
 
 PREVIEW_SALT = "finance.csv.preview.v1"
@@ -143,13 +144,17 @@ def commit_import(owner, account, upload, preview_token: str) -> tuple[ImportBat
                 file_hash=file_hash,
                 row_count=parsed.row_count,
             )
+            rules = active_rules(owner)
             Transaction.objects.bulk_create(
                 [
-                    Transaction(
-                        owner=owner,
-                        account=locked_account,
-                        import_batch=batch,
-                        **{field: value for field, value in row.items() if field != "row"},
+                    assign_category(
+                        Transaction(
+                            owner=owner,
+                            account=locked_account,
+                            import_batch=batch,
+                            **{field: value for field, value in row.items() if field != "row"},
+                        ),
+                        rules,
                     )
                     for row in parsed.rows
                 ]

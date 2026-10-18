@@ -25,9 +25,13 @@ export function TransactionForm({ accounts, categories, transaction, onCancel, o
   const availableCategories = categories.filter(
     (category) => category.is_active || category.id === transaction?.category,
   );
+  const initialCategory =
+    !transaction || transaction.category_source !== "manual"
+      ? "__automatic"
+      : (transaction.category ?? "");
   const [values, setValues] = useState({
     account: transaction?.account ?? availableAccounts[0]?.id ?? "",
-    category: transaction?.category ?? "",
+    category: initialCategory,
     transaction_date: transaction?.transaction_date ?? localToday(),
     description: transaction?.description ?? "",
     amount: transaction?.amount ?? "",
@@ -64,10 +68,17 @@ export function TransactionForm({ accounts, categories, transaction, onCancel, o
     setSubmitting(true);
     setFormError(null);
     try {
+      const { category: selectedCategory, ...entry } = values;
+      const categoryChoice: Pick<CreateTransaction, "category" | "category_mode"> =
+        transaction && selectedCategory === initialCategory
+          ? {}
+          : selectedCategory === "__automatic"
+            ? { category: null, category_mode: "automatic" }
+            : { category: selectedCategory || null, category_mode: "manual" };
       await onSubmit({
-        ...values,
+        ...entry,
+        ...categoryChoice,
         description: values.description.trim(),
-        category: values.category || null,
         notes: values.notes.trim(),
       });
     } catch (error: unknown) {
@@ -135,6 +146,7 @@ export function TransactionForm({ accounts, categories, transaction, onCancel, o
                 value={values.category}
                 onChange={(event) => setField("category", event.target.value)}
               >
+                <option value="__automatic">Automatic rules</option>
                 <option value="">Uncategorized</option>
                 {availableCategories.map((category) => (
                   <option value={category.id} key={category.id}>
@@ -143,6 +155,10 @@ export function TransactionForm({ accounts, categories, transaction, onCancel, o
                   </option>
                 ))}
               </select>
+              <span className="field-hint">
+                Automatic uses the first matching enabled rule. Choosing a category or Uncategorized
+                keeps your manual choice.
+              </span>
               {errors.category ? <span className="field-error">{errors.category}</span> : null}
             </label>
             <label>

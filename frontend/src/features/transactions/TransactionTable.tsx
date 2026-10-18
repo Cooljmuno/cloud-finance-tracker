@@ -46,7 +46,18 @@ export function TransactionTable({ transactions, onEdit, onDelete, disabled }: P
                   {transaction.notes ? <span className="row-note">{transaction.notes}</span> : null}
                 </td>
                 <td>{transaction.account_name}</td>
-                <td>{transaction.category_name ?? "Uncategorized"}</td>
+                <td>
+                  {transaction.category_name ?? "Uncategorized"}
+                  <span className="row-note">
+                    {transaction.category_source === "rule"
+                      ? transaction.matched_rule_name
+                        ? `Rule: ${transaction.matched_rule_name}`
+                        : "Assigned by a rule"
+                      : transaction.category_source === "uncategorized"
+                        ? "No matching rule"
+                        : "Manual choice"}
+                  </span>
+                </td>
                 <td>
                   <span className={`status-pill status-pill--${transaction.status}`}>
                     {transaction.status}

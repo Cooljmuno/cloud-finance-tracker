@@ -1,8 +1,10 @@
 import uuid
+from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models.functions import Lower
 
@@ -47,11 +49,18 @@ class TransactionQuerySet(OwnerImmutableQuerySet):
         "category_id",
         "import_batch",
         "import_batch_id",
+        "matched_rule",
+        "matched_rule_id",
+        "category_source",
     }
 
 
 class ImportBatchQuerySet(OwnerImmutableQuerySet):
     ownership_fields = OwnerImmutableQuerySet.ownership_fields | {"account", "account_id"}
+
+
+class CategoryReferenceQuerySet(OwnerImmutableQuerySet):
+    ownership_fields = OwnerImmutableQuerySet.ownership_fields | {"category", "category_id"}
 
 
 class OwnerImmutableModel(models.Model):
@@ -201,11 +210,134 @@ class Category(OwnerImmutableModel):
     def __str__(self) -> str:
         return self.name
 
+    def clean(self) -> None:
+        super().clean()
+        if not self._state.adding and self.kind != self.Kind.EXPENSE and self.budgets.exists():
+            raise ValidationError(
+                {"kind": "Categories with budgets must remain expense categories."}
+            )
+
+
+class CategorizationRule(OwnerImmutableModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="categorization_rules"
+    )
+    name = models.CharField(max_length=100)
+    match_text = models.CharField(max_length=100)
+    priority = models.PositiveIntegerField(
+        default=100, validators=[MinValueValidator(1), MaxValueValidator(9999)]
+    )
+    category = models.ForeignKey(Category, on_delete=models.RESTRICT, related_name="rules")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = CategoryReferenceQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["priority", "created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(Lower("name"), "owner", name="unique_rule_name_per_owner"),
+            models.CheckConstraint(
+                condition=models.Q(priority__gte=1, priority__lte=9999),
+                name="rule_priority_valid",
+            ),
+        ]
+        indexes = [models.Index(fields=["owner", "is_active"], name="rule_owner_active_idx")]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        self.name = " ".join(self.name.split())
+        self.match_text = " ".join(self.match_text.split())
+        errors = {}
+        if not self.name:
+            errors["name"] = "This field may not be blank."
+        if not self.match_text:
+            errors["match_text"] = "This field may not be blank."
+        if self.owner_id and self.category_id and self.category.owner_id != self.owner_id:
+            errors["category"] = "Category must belong to the rule owner."
+        elif self.category_id and not self.category.is_active:
+            original_category_id = None
+            if not self._state.adding:
+                original_category_id = (
+                    type(self)
+                    .objects.filter(pk=self.pk)
+                    .values_list("category_id", flat=True)
+                    .first()
+                )
+            if original_category_id != self.category_id:
+                errors["category"] = "Choose an active category."
+        if errors:
+            raise ValidationError(errors)
+
+
+class MonthlyBudget(OwnerImmutableModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="monthly_budgets"
+    )
+    category = models.ForeignKey(Category, on_delete=models.RESTRICT, related_name="budgets")
+    month = models.DateField()
+    currency = models.CharField(max_length=3, default="USD", validators=[currency_validator])
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = CategoryReferenceQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-month", "category__name", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "category", "month", "currency"],
+                name="unique_monthly_category_budget",
+            ),
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name="budget_amount_positive"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.month:%Y-%m}: {self.category.name} ({self.currency})"
+
+    def clean(self) -> None:
+        super().clean()
+        errors = {}
+        if isinstance(self.month, date) and self.month.day != 1:
+            errors["month"] = "Use the first day of the budget month."
+        if self.owner_id and self.category_id:
+            if self.category.owner_id != self.owner_id:
+                errors["category"] = "Category must belong to the budget owner."
+            elif self.category.kind != Category.Kind.EXPENSE:
+                errors["category"] = "Budgets require an expense category."
+            elif not self.category.is_active:
+                original_category_id = None
+                if not self._state.adding:
+                    original_category_id = (
+                        type(self)
+                        .objects.filter(pk=self.pk)
+                        .values_list("category_id", flat=True)
+                        .first()
+                    )
+                if original_category_id != self.category_id:
+                    errors["category"] = "Choose an active category."
+        if errors:
+            raise ValidationError(errors)
+
 
 class Transaction(OwnerImmutableModel):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         POSTED = "posted", "Posted"
+
+    class CategorySource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        RULE = "rule", "Rule"
+        UNCATEGORIZED = "uncategorized", "Uncategorized"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -227,6 +359,16 @@ class Transaction(OwnerImmutableModel):
     )
     import_batch = models.ForeignKey(
         ImportBatch,
+        on_delete=models.SET_NULL,
+        related_name="transactions",
+        null=True,
+        blank=True,
+    )
+    category_source = models.CharField(
+        max_length=15, choices=CategorySource.choices, default=CategorySource.UNCATEGORIZED
+    )
+    matched_rule = models.ForeignKey(
+        CategorizationRule,
         on_delete=models.SET_NULL,
         related_name="transactions",
         null=True,
@@ -276,6 +418,13 @@ class Transaction(OwnerImmutableModel):
         super().clean()
         errors = {}
 
+        if (
+            self._state.adding
+            and self.category_id
+            and self.category_source == self.CategorySource.UNCATEGORIZED
+        ):
+            self.category_source = self.CategorySource.MANUAL
+
         if self.owner_id and self.account_id and self.account.owner_id != self.owner_id:
             errors["account"] = "Account must belong to the transaction owner."
 
@@ -284,6 +433,9 @@ class Transaction(OwnerImmutableModel):
 
         if self.owner_id and self.import_batch_id and self.import_batch.owner_id != self.owner_id:
             errors["import_batch"] = "Import batch must belong to the transaction owner."
+
+        if self.owner_id and self.matched_rule_id and self.matched_rule.owner_id != self.owner_id:
+            errors["matched_rule"] = "Matched rule must belong to the transaction owner."
 
         if errors:
             raise ValidationError(errors)

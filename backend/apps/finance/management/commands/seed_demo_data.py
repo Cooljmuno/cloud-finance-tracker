@@ -13,7 +13,14 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction as database_transaction
 from django.utils import timezone
 
-from apps.finance.models import Category, FinancialAccount, ImportBatch, Transaction
+from apps.finance.models import (
+    CategorizationRule,
+    Category,
+    FinancialAccount,
+    ImportBatch,
+    MonthlyBudget,
+    Transaction,
+)
 
 DEMO_USERNAME = "portfolio-demo"
 DEMO_EMAIL = "demo@local.invalid"
@@ -164,6 +171,8 @@ class Command(BaseCommand):
             if options["reset"]:
                 Transaction.objects.filter(owner=user).delete()
                 ImportBatch.objects.filter(owner=user).delete()
+                CategorizationRule.objects.filter(owner=user).delete()
+                MonthlyBudget.objects.filter(owner=user).delete()
                 Category.objects.filter(owner=user).delete()
                 FinancialAccount.objects.filter(owner=user).delete()
 
@@ -238,6 +247,8 @@ class Command(BaseCommand):
                     "owner": user,
                     "account": accounts[account_key],
                     "category": categories.get(category_key),
+                    "category_source": Transaction.CategorySource.MANUAL,
+                    "matched_rule": None,
                     "transaction_date": reference_date - timedelta(days=days_ago),
                     "description": description,
                     "amount": Decimal(amount),

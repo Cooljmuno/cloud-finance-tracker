@@ -39,6 +39,9 @@ const transaction = {
   category: category.id,
   category_name: category.name,
   import_batch: null,
+  category_source: "manual",
+  matched_rule: null,
+  matched_rule_name: null,
   transaction_date: "2026-08-29",
   description: "Juniper Market",
   amount: "-86.24",
@@ -87,7 +90,10 @@ afterEach(() => {
 
 describe("Cloud Finance Tracker", () => {
   it("shows local sign-in when there is no session", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "Unauthenticated" }, 401)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "Unauthenticated" }, 401)),
+    );
 
     renderApp();
 
@@ -130,7 +136,9 @@ describe("Cloud Finance Tracker", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("heading", { name: "Transaction ledger" })).toBeInTheDocument();
-    const loginCall = fetchMock.mock.calls.find(([input]) => String(input).includes("/auth/login/"));
+    const loginCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/auth/login/"),
+    );
     expect(loginCall?.[1]).toMatchObject({ method: "POST", credentials: "include" });
     expect(new Headers(loginCall?.[1]?.headers).get("X-CSRFToken")).toBe("test-csrf");
   });
@@ -163,7 +171,10 @@ describe("Cloud Finance Tracker", () => {
     const fetchMock = authenticatedHandler((url, init) => {
       if (url.pathname.endsWith("/transactions/") && init?.method === "POST") {
         submittedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return jsonResponse({ ...transaction, id: "transaction-2", description: "Metro Fuel" }, 201);
+        return jsonResponse(
+          { ...transaction, id: "transaction-2", description: "Metro Fuel" },
+          201,
+        );
       }
       return undefined;
     });
