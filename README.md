@@ -492,6 +492,11 @@ bootstrap and deployment helpers; the manual GitHub deployment workflow uses OID
 stored AWS access keys. CloudWatch logs and operational alarms are configured in Terraform;
 notifications require explicit action destinations.
 
+Local Docker remains the default. For a cloud showcase once or twice a year, use the
+[occasional AWS demo workflow](docs/deployment.md#occasional-aws-demos): create a temporary full
+environment, demonstrate it, then complete cleanup. The light-use estimate is $2–$5 per demo day
+before tax and retained storage, with no hard spending cap or automatic deletion.
+
 The next operational step is to choose an AWS account and budget, configure temporary admin access,
 review a real Terraform plan, then provision and rehearse the first deployment using the
 [deployment runbook](docs/deployment.md). No AWS resources have been provisioned by this milestone.
