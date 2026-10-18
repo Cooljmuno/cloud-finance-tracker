@@ -14,14 +14,7 @@ export type Paginated<T> = {
 export type FinancialAccount = {
   id: string;
   name: string;
-  account_type:
-    | "checking"
-    | "savings"
-    | "credit_card"
-    | "cash"
-    | "investment"
-    | "loan"
-    | "other";
+  account_type: "checking" | "savings" | "credit_card" | "cash" | "investment" | "loan" | "other";
   institution: string;
   currency: string;
   opening_balance: string;
@@ -38,6 +31,13 @@ export type Category = {
   created_at: string;
   updated_at: string;
 };
+
+export type AccountInput = Pick<
+  FinancialAccount,
+  "name" | "account_type" | "institution" | "opening_balance"
+>;
+
+export type CategoryInput = Pick<Category, "name" | "kind">;
 
 export type FinanceTransaction = {
   id: string;

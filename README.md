@@ -27,12 +27,23 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
 ## Product capabilities
 
 - Responsive authenticated transaction ledger with loading, failure, empty, and mobile states.
+- Account and category setup for authenticated users with an empty workspace, without seeded
+  finance records.
+- Account and category creation, editing, archiving, restoration, and confirmed deletion of unused
+  resources.
 - Account, category, status, and date-range filters with server-side pagination.
-- Transaction creation with signed decimal validation and active-resource enforcement.
+- Transaction creation and editing with signed decimal validation and active-resource enforcement.
+- Transaction deletion with explicit confirmation and recovery when a deleted row empties a page.
 - Authenticated per-user CRUD APIs for financial accounts, categories, and transactions.
 - Deterministic synthetic fixtures with three accounts, ten categories, and 24 transactions.
 
-The current automated suite contains 73 Pytest tests, 11 Vitest tests, and 2 Playwright browser
+New account forms use USD. Existing account currencies are read-only in the UI; currency conversion
+is not implemented. Archived resources remain visible in transaction history. An existing
+transaction can keep its current archived account or category when edited; new transactions require
+active resources. Deleting an account or category used by transactions returns `409` and advises
+archiving it.
+
+The current automated suite contains 85 Pytest tests, 21 Vitest tests, and 2 Playwright browser
 workflows. See [`docs/decisions`](docs/decisions) for the tradeoffs behind the architecture.
 
 ## Architecture
@@ -104,12 +115,24 @@ The seed command privately prompts for a password and creates the local username
 three accounts, ten categories, and 24 synthetic transactions. Sign in at
 <http://localhost:5173> with that username and your chosen password.
 
+Existing local users continue signing in with their existing credentials. The empty-workspace flow
+starts after authentication: a user with no finance records can create an account and categories
+through the UI. This also supports newly provisioned Cognito profiles when AWS deployment is added.
+Local registration has not been added; the documented demo setup remains the simplest local start.
+
 Check the complete local workflow:
 
 1. Sign in and confirm that the transaction ledger loads.
 2. Apply an account or category filter, then clear it.
-3. Add a synthetic transaction such as `Local verification` with amount `-12.34`; confirm it appears.
-4. Refresh the page, sign out, and confirm that the sign-in screen returns.
+3. Open **Accounts** and create a practice account, then edit its name. Open **Categories** and
+   create a practice expense category.
+4. Open **Transactions**, add `Local verification` with amount `-12.34` using those resources, then
+   edit the transaction and confirm that the changes appear.
+5. Try deleting its account or category and confirm that the app advises archiving instead. Archive
+   both resources, then edit the existing transaction while keeping its current archived references.
+6. Restore the resources. Delete the practice transaction using its confirmation, then delete the
+   now-unused practice account and category using their confirmations.
+7. Refresh the page, sign out, and confirm that the sign-in screen returns.
 
 The API and database health response is available at
 <http://localhost:8000/api/v1/health/>.
@@ -189,6 +212,8 @@ development container is used for the app build and unit tests, not as a browser
 
 The Playwright workflows mock API responses to test browser behavior. The manual local workflow
 above verifies the running React client, Django API, session authentication, and PostgreSQL together.
+Conflict-handling tests exercise controlled interleavings; they do not measure concurrent-load
+performance.
 
 Pytest uses in-memory SQLite when PostgreSQL environment variables are absent. CI and Docker run
 the same suite against PostgreSQL so database behavior is still verified using the production
@@ -220,9 +245,9 @@ VITE_COGNITO_LOGOUT_URI
 
 ## Next milestone
 
-Add account onboarding, then build synthetic CSV imports with preview/commit semantics, duplicate
-detection, and deterministic categorization rules. Later milestones add budgets and visualizations,
-then Terraform-managed AWS infrastructure, observability, and deployment workflows.
+Build synthetic CSV imports with preview/commit semantics, duplicate detection, and deterministic
+categorization rules. Later milestones add budgets and visualizations, then Terraform-managed AWS
+infrastructure, observability, and deployment workflows.
 
 ## Data policy
 

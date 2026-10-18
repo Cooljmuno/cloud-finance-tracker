@@ -1,6 +1,8 @@
 import { requestJson, type AuthTransport } from "./client";
 import type {
+  AccountInput,
   Category,
+  CategoryInput,
   CreateTransaction,
   FinanceTransaction,
   FinancialAccount,
@@ -26,6 +28,54 @@ export function getAccounts(transport: AuthTransport, signal?: AbortSignal) {
 
 export function getCategories(transport: AuthTransport, signal?: AbortSignal) {
   return fetchAll<Category>("categories/", transport, signal);
+}
+
+export function createAccount(transport: AuthTransport, payload: AccountInput) {
+  return requestJson<FinancialAccount>(
+    "accounts/",
+    { method: "POST", body: JSON.stringify(payload) },
+    transport,
+  );
+}
+
+export function updateAccount(
+  transport: AuthTransport,
+  id: string,
+  payload: Partial<AccountInput & { is_active: boolean }>,
+) {
+  return requestJson<FinancialAccount>(
+    `accounts/${id}/`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+    transport,
+  );
+}
+
+export function deleteAccount(transport: AuthTransport, id: string) {
+  return requestJson<void>(`accounts/${id}/`, { method: "DELETE" }, transport);
+}
+
+export function createCategory(transport: AuthTransport, payload: CategoryInput) {
+  return requestJson<Category>(
+    "categories/",
+    { method: "POST", body: JSON.stringify(payload) },
+    transport,
+  );
+}
+
+export function updateCategory(
+  transport: AuthTransport,
+  id: string,
+  payload: Partial<CategoryInput & { is_active: boolean }>,
+) {
+  return requestJson<Category>(
+    `categories/${id}/`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+    transport,
+  );
+}
+
+export function deleteCategory(transport: AuthTransport, id: string) {
+  return requestJson<void>(`categories/${id}/`, { method: "DELETE" }, transport);
 }
 
 export function getTransactions(
@@ -56,4 +106,20 @@ export function createTransaction(transport: AuthTransport, payload: CreateTrans
     { method: "POST", body: JSON.stringify(payload) },
     transport,
   );
+}
+
+export function updateTransaction(
+  transport: AuthTransport,
+  id: string,
+  payload: CreateTransaction,
+) {
+  return requestJson<FinanceTransaction>(
+    `transactions/${id}/`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+    transport,
+  );
+}
+
+export function deleteTransaction(transport: AuthTransport, id: string) {
+  return requestJson<void>(`transactions/${id}/`, { method: "DELETE" }, transport);
 }

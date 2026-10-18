@@ -1,29 +1,46 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { fieldErrors } from "../../api/client";
-import type { Category, CreateTransaction, FinancialAccount } from "../../api/types";
+import type {
+  Category,
+  CreateTransaction,
+  FinanceTransaction,
+  FinancialAccount,
+} from "../../api/types";
 import { localToday } from "../../shared/format";
 
 type Props = {
   accounts: FinancialAccount[];
   categories: Category[];
+  transaction?: FinanceTransaction;
   onCancel: () => void;
   onSubmit: (payload: CreateTransaction) => Promise<void>;
 };
 
-export function TransactionForm({ accounts, categories, onCancel, onSubmit }: Props) {
+export function TransactionForm({ accounts, categories, transaction, onCancel, onSubmit }: Props) {
+  const panel = useRef<HTMLElement>(null);
+  const availableAccounts = accounts.filter(
+    (account) => account.is_active || account.id === transaction?.account,
+  );
+  const availableCategories = categories.filter(
+    (category) => category.is_active || category.id === transaction?.category,
+  );
   const [values, setValues] = useState({
-    account: accounts[0]?.id ?? "",
-    category: "",
-    transaction_date: localToday(),
-    description: "",
-    amount: "",
-    status: "posted" as "posted" | "pending",
-    notes: "",
+    account: transaction?.account ?? availableAccounts[0]?.id ?? "",
+    category: transaction?.category ?? "",
+    transaction_date: transaction?.transaction_date ?? localToday(),
+    description: transaction?.description ?? "",
+    amount: transaction?.amount ?? "",
+    status: transaction?.status ?? ("posted" as "posted" | "pending"),
+    notes: transaction?.notes ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    panel.current?.focus();
+  }, []);
 
   function setField(field: keyof typeof values, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -54,14 +71,16 @@ export function TransactionForm({ accounts, categories, onCancel, onSubmit }: Pr
         notes: values.notes.trim(),
       });
     } catch (error: unknown) {
-      const backendErrors = fieldErrors(error);
+      const backendErrors = Object.fromEntries(
+        Object.entries(fieldErrors(error)).filter(([field]) => field in values),
+      );
       setErrors(backendErrors);
       setFormError(
         Object.keys(backendErrors).length > 0
           ? "Review the highlighted fields."
           : error instanceof Error
             ? error.message
-            : "Unable to create transaction.",
+            : "Unable to save transaction.",
       );
     } finally {
       setSubmitting(false);
@@ -69,109 +88,134 @@ export function TransactionForm({ accounts, categories, onCancel, onSubmit }: Pr
   }
 
   return (
-    <section className="transaction-panel" aria-labelledby="transaction-form-heading">
+    <section
+      ref={panel}
+      tabIndex={-1}
+      className="transaction-panel"
+      aria-labelledby="transaction-form-heading"
+    >
       <div className="panel-heading">
         <div>
-          <p className="card-kicker">New ledger entry</p>
-          <h2 id="transaction-form-heading">Add transaction</h2>
+          <p className="card-kicker">{transaction ? "Update ledger entry" : "New ledger entry"}</p>
+          <h2 id="transaction-form-heading">
+            {transaction ? "Edit transaction" : "Add transaction"}
+          </h2>
         </div>
-        <button className="icon-button" type="button" onClick={onCancel} aria-label="Close form">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onCancel}
+          aria-label="Close form"
+          disabled={submitting}
+        >
           ×
         </button>
       </div>
       <form onSubmit={submit}>
-        <div className="form-grid">
-          <label>
-            Account
-            <select value={values.account} onChange={(event) => setField("account", event.target.value)}>
-              {accounts.map((account) => (
-                <option value={account.id} key={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            {errors.account ? <span className="field-error">{errors.account}</span> : null}
-          </label>
-          <label>
-            Category <span className="optional">Optional</span>
-            <select value={values.category} onChange={(event) => setField("category", event.target.value)}>
-              <option value="">Uncategorized</option>
-              {categories.map((category) => (
-                <option value={category.id} key={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            {errors.category ? <span className="field-error">{errors.category}</span> : null}
-          </label>
-          <label>
-            Date
-            <input
-              type="date"
-              value={values.transaction_date}
-              onChange={(event) => setField("transaction_date", event.target.value)}
-              required
-            />
-            {errors.transaction_date ? (
-              <span className="field-error">{errors.transaction_date}</span>
-            ) : null}
-          </label>
-          <label>
-            Status
-            <select
-              value={values.status}
-              onChange={(event) => setField("status", event.target.value)}
-            >
-              <option value="posted">Posted</option>
-              <option value="pending">Pending</option>
-            </select>
-          </label>
-          <label className="wide-field">
-            Description
-            <input
-              value={values.description}
-              onChange={(event) => setField("description", event.target.value)}
-              maxLength={255}
-              placeholder="e.g. Juniper Market"
-            />
-            {errors.description ? <span className="field-error">{errors.description}</span> : null}
-          </label>
-          <label>
-            Amount
-            <input
-              type="text"
-              inputMode="decimal"
-              value={values.amount}
-              onChange={(event) => setField("amount", event.target.value)}
-              placeholder="-42.18"
-            />
-            <span className="field-hint">Negative is spending; positive is income.</span>
-            {errors.amount ? <span className="field-error">{errors.amount}</span> : null}
-          </label>
-          <label className="wide-field">
-            Notes <span className="optional">Optional</span>
-            <textarea
-              value={values.notes}
-              onChange={(event) => setField("notes", event.target.value)}
-              maxLength={1000}
-              rows={3}
-            />
-            {errors.notes ? <span className="field-error">{errors.notes}</span> : null}
-          </label>
-        </div>
-        {formError ? (
-          <p className="form-error" role="alert">
-            {formError}
-          </p>
-        ) : null}
-        <div className="form-actions">
-          <button className="text-button" type="button" onClick={onCancel}>
-            Cancel
-          </button>
-          <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save transaction"}
-          </button>
-        </div>
+        <fieldset disabled={submitting}>
+          <div className="form-grid">
+            <label>
+              Account
+              <select
+                value={values.account}
+                onChange={(event) => setField("account", event.target.value)}
+              >
+                {availableAccounts.map((account) => (
+                  <option value={account.id} key={account.id}>
+                    {account.name}
+                    {account.is_active ? "" : " (archived)"}
+                  </option>
+                ))}
+              </select>
+              {errors.account ? <span className="field-error">{errors.account}</span> : null}
+            </label>
+            <label>
+              Category <span className="optional">Optional</span>
+              <select
+                value={values.category}
+                onChange={(event) => setField("category", event.target.value)}
+              >
+                <option value="">Uncategorized</option>
+                {availableCategories.map((category) => (
+                  <option value={category.id} key={category.id}>
+                    {category.name}
+                    {category.is_active ? "" : " (archived)"}
+                  </option>
+                ))}
+              </select>
+              {errors.category ? <span className="field-error">{errors.category}</span> : null}
+            </label>
+            <label>
+              Date
+              <input
+                type="date"
+                value={values.transaction_date}
+                onChange={(event) => setField("transaction_date", event.target.value)}
+                required
+              />
+              {errors.transaction_date ? (
+                <span className="field-error">{errors.transaction_date}</span>
+              ) : null}
+            </label>
+            <label>
+              Status
+              <select
+                value={values.status}
+                onChange={(event) => setField("status", event.target.value)}
+              >
+                <option value="posted">Posted</option>
+                <option value="pending">Pending</option>
+              </select>
+            </label>
+            <label className="wide-field">
+              Description
+              <input
+                value={values.description}
+                onChange={(event) => setField("description", event.target.value)}
+                maxLength={255}
+                placeholder="e.g. Juniper Market"
+              />
+              {errors.description ? (
+                <span className="field-error">{errors.description}</span>
+              ) : null}
+            </label>
+            <label>
+              Amount
+              <input
+                type="text"
+                inputMode="decimal"
+                value={values.amount}
+                onChange={(event) => setField("amount", event.target.value)}
+                placeholder="-42.18"
+              />
+              <span className="field-hint">Negative is spending; positive is income.</span>
+              {errors.amount ? <span className="field-error">{errors.amount}</span> : null}
+            </label>
+            <label className="wide-field">
+              Notes <span className="optional">Optional</span>
+              <textarea
+                value={values.notes}
+                onChange={(event) => setField("notes", event.target.value)}
+                maxLength={1000}
+                rows={3}
+              />
+              {errors.notes ? <span className="field-error">{errors.notes}</span> : null}
+            </label>
+          </div>
+          {formError ? (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <div className="form-actions">
+            <button className="text-button" type="button" onClick={onCancel}>
+              Cancel
+            </button>
+            <button className="primary-button" type="submit" disabled={submitting}>
+              {submitting ? "Saving…" : transaction ? "Save changes" : "Save transaction"}
+            </button>
+          </div>
+        </fieldset>
       </form>
     </section>
   );

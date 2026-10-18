@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError as ModelValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import serializers
 
@@ -11,7 +13,33 @@ def normalize_name(value: str) -> str:
     return normalized
 
 
-class FinancialAccountSerializer(serializers.ModelSerializer):
+class UniqueNameSerializer(serializers.ModelSerializer):
+    duplicate_name_message = "You already have a resource with this name."
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        duplicate = self.Meta.model.objects.filter(
+            owner=self.context["request"].user,
+            name__iexact=name,
+        )
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError({"name": self.duplicate_name_message})
+        return attrs
+
+    def save(self, **kwargs):
+        try:
+            with transaction.atomic():
+                return super().save(**kwargs)
+        except ModelValidationError, IntegrityError:
+            self.validate(self.validated_data)
+            raise
+
+
+class FinancialAccountSerializer(UniqueNameSerializer):
+    duplicate_name_message = "You already have an account with this name."
     currency = serializers.CharField(max_length=3, required=False, default="USD")
 
     class Meta:
@@ -38,23 +66,10 @@ class FinancialAccountSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Use a three-letter currency code such as USD.")
         return normalized
 
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        request = self.context["request"]
-        name = attrs.get("name", getattr(self.instance, "name", None))
 
-        duplicate = FinancialAccount.objects.filter(owner=request.user, name__iexact=name)
-        if self.instance:
-            duplicate = duplicate.exclude(pk=self.instance.pk)
-        if duplicate.exists():
-            raise serializers.ValidationError(
-                {"name": "You already have an account with this name."}
-            )
+class CategorySerializer(UniqueNameSerializer):
+    duplicate_name_message = "You already have a category with this name."
 
-        return attrs
-
-
-class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "kind", "is_active", "created_at", "updated_at"]
@@ -62,21 +77,6 @@ class CategorySerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return normalize_name(value)
-
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        request = self.context["request"]
-        name = attrs.get("name", getattr(self.instance, "name", None))
-
-        duplicate = Category.objects.filter(owner=request.user, name__iexact=name)
-        if self.instance:
-            duplicate = duplicate.exclude(pk=self.instance.pk)
-        if duplicate.exists():
-            raise serializers.ValidationError(
-                {"name": "You already have a category with this name."}
-            )
-
-        return attrs
 
 
 class TransactionSerializer(serializers.ModelSerializer):
