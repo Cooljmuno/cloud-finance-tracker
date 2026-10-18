@@ -1,10 +1,20 @@
 # AWS deployment runbook
 
-This repository prepares an AWS environment; it has not provisioned or deployed one. The local app
-continues to run at `http://localhost:5173/`. The five Terraform mock tests and 41 deployment-script
-tests do not contact a live AWS account. Four Terraform tests simulate plans; one simulates an
-apply with the entire AWS provider mocked. That mock apply resolves dependent values without
-creating AWS resources. The steps below are the separate, deliberate path to a paid environment.
+The AWS infrastructure was provisioned for a temporary showcase on October 18, 2026. Database
+bootstrap and release migrations have succeeded, and the public HTTPS API health check has passed.
+The first GitHub release completed, including frontend publication and CloudFront invalidation.
+An automated harness passed 54 live checks across 81 finance API requests with real Cognito tokens.
+After the user reported finishing the demo, all 64 application resources and the final database
+snapshot were removed; cleanup was verified at 20:55:51 UTC. The remote-state bucket is retained
+and can incur storage charges. Hosted-UI/email/browser behavior was not independently recorded.
+See the [dated evidence record](evidence/2026-10-18-aws-demo.md)
+for the exact release and observed results.
+
+Local Docker remains the normal development environment at `http://localhost:5173/` when started.
+The local containers are stopped after this showcase, with their volumes preserved. The five
+Terraform mock tests and 44 deployment-script tests do not contact AWS. Four Terraform tests
+simulate plans; one simulates an apply with the entire AWS provider mocked. The steps below
+describe the separate administrative and release operations used for a paid environment.
 
 Run commands from a reviewed `main` checkout of the Git repository directory named
 `cloud-finance-tracker`, the directory that contains `compose.yaml`, `backend`, `frontend`, and
@@ -219,10 +229,11 @@ backup retention, and required final snapshot. Check current RDS engine/class av
 account and region if planning reports an unsupported version. Revisit the cost estimate with
 these actual resources. A mock-provider test cannot establish live service availability or quotas.
 
-RDS is pinned to PostgreSQL major version `18` with automatic minor upgrades enabled. AWS's
-[current release notes][rds-versions] list minor version 18.6, but the configuration does not force
-the instance back to that patch after AWS applies a newer compatible minor update. The local
-PostgreSQL test image is separately pinned to 18.6.
+RDS is pinned to PostgreSQL major version `18` with automatic minor upgrades enabled. AWS chooses
+an available default minor for a new instance; the October 18 showcase provisioned **18.3**.
+Availability of 18.6 in [AWS's release notes][rds-versions] does not mean a major-only request
+selects that minor. The configuration also avoids forcing an older minor after a managed update.
+The local PostgreSQL test image is separately pinned to 18.6.
 
 Only after that review, provision this saved plan:
 
@@ -464,7 +475,7 @@ instead of assuming a destroy command or a budget alert establishes a zero balan
 
 ## Verification without an AWS account
 
-The normal CI workflow validates application code, production settings, 41 script tests, and five
+The normal CI workflow validates application code, production settings, 44 script tests, and five
 Terraform mock tests. To inspect the infrastructure locally without remote state or AWS access,
 run initialization with the backend disabled and the committed provider lock file, then validate
 and run the mock tests in each Terraform root. Do this in a clean checkout or dedicated working
