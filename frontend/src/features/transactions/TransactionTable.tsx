@@ -1,7 +1,14 @@
 import type { FinanceTransaction } from "../../api/types";
 import { formatDate, formatMoney } from "../../shared/format";
 
-export function TransactionTable({ transactions }: { transactions: FinanceTransaction[] }) {
+type Props = {
+  transactions: FinanceTransaction[];
+  onEdit: (transaction: FinanceTransaction) => void;
+  onDelete: (transaction: FinanceTransaction) => void;
+  disabled?: boolean;
+};
+
+export function TransactionTable({ transactions, onEdit, onDelete, disabled }: Props) {
   if (transactions.length === 0) {
     return (
       <div className="empty-state">
@@ -25,6 +32,7 @@ export function TransactionTable({ transactions }: { transactions: FinanceTransa
             <th scope="col" className="amount-column">
               Amount
             </th>
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -46,6 +54,28 @@ export function TransactionTable({ transactions }: { transactions: FinanceTransa
                 </td>
                 <td className={`amount-column amount-${isInflow ? "positive" : "negative"}`}>
                   {formatMoney(transaction.amount, transaction.currency)}
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button
+                      className="text-button"
+                      type="button"
+                      disabled={disabled}
+                      aria-label={`Edit transaction ${transaction.description}`}
+                      onClick={() => onEdit(transaction)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-button danger-text"
+                      type="button"
+                      disabled={disabled}
+                      aria-label={`Delete transaction ${transaction.description}`}
+                      onClick={() => onDelete(transaction)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             );

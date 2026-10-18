@@ -54,6 +54,189 @@ button:disabled {
   opacity: 0.55;
 }
 
+fieldset {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.workspace-nav {
+  display: flex;
+  gap: 6px;
+  padding-top: 20px;
+}
+
+.workspace-nav button {
+  padding: 11px 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #5d705f;
+  background: transparent;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.workspace-nav button[aria-current="page"] {
+  border-color: #cbd8c9;
+  color: #1e5a38;
+  background: #e7eee6;
+}
+
+.workspace-nav button:hover {
+  background: #eaf0e7;
+}
+
+.onboarding-card {
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid #cbd8c9;
+  border-radius: 18px;
+  background: #eaf0e7;
+}
+
+.onboarding-card h2 {
+  margin-bottom: 12px;
+  color: #214c31;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.8rem;
+  font-weight: 500;
+}
+
+.onboarding-card p {
+  max-width: 60ch;
+  color: #536458;
+  line-height: 1.6;
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.resource-card {
+  padding: 22px;
+  border: 1px solid #dce2d9;
+  border-radius: 14px;
+  background: #fafbf8;
+  overflow-wrap: anywhere;
+}
+
+.resource-card h3 {
+  margin-bottom: 12px;
+  color: #253129;
+  font-size: 1.08rem;
+}
+
+.resource-meta {
+  margin-bottom: 10px;
+  color: #647168;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.resource-actions,
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resource-actions {
+  margin-top: 20px;
+}
+
+.row-actions {
+  min-width: 100px;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+.resource-actions button {
+  padding: 10px 13px;
+  font-size: 0.79rem;
+}
+
+.danger-button {
+  padding: 12px 18px;
+  border: 1px solid #934b42;
+  border-radius: 11px;
+  color: #fff;
+  background: #934b42;
+  font-weight: 750;
+}
+
+.danger-button:hover {
+  background: #7b3d36;
+}
+
+.text-button.danger-text {
+  color: #934b42;
+}
+
+.confirm-panel {
+  padding: 22px;
+  margin: 18px 0;
+  border: 1px solid #e3c7ba;
+  border-radius: 16px;
+  color: #654c42;
+  background: #fcf5ef;
+}
+
+.confirm-panel h2 {
+  font-size: 1.25rem;
+}
+
+.confirm-panel p {
+  line-height: 1.6;
+}
+
+.resource-card .confirm-panel {
+  padding: 16px;
+  margin-bottom: 0;
+  font-size: 0.83rem;
+}
+
+.success-banner {
+  padding: 14px 18px;
+  border: 1px solid #cbd8c9;
+  border-radius: 12px;
+  color: #214c31;
+  background: #eaf0e7;
+  font-size: 0.88rem;
+}
+
+.error-banner.workspace-error {
+  margin: 0 0 20px;
+}
+
+.transaction-panel form > h3 {
+  padding-top: 24px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-nav {
+    justify-content: space-between;
+    gap: 0;
+  }
+
+  .workspace-nav button {
+    padding: 10px 12px;
+  }
+
+  .onboarding-card {
+    padding: 22px;
+  }
+}
+
 h1,
 h2,
 h3,
