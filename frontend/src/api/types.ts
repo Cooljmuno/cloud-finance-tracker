@@ -46,6 +46,7 @@ export type FinanceTransaction = {
   currency: string;
   category: string | null;
   category_name: string | null;
+  import_batch: string | null;
   transaction_date: string;
   description: string;
   amount: string;
@@ -71,4 +72,49 @@ export type CreateTransaction = {
   amount: string;
   status: "pending" | "posted";
   notes: string;
+};
+
+export type ImportBatch = {
+  id: string;
+  account: string;
+  account_name: string;
+  file_name: string;
+  file_hash: string;
+  row_count: number;
+  created_at: string;
+};
+
+export type ImportRow = {
+  row: number;
+  transaction_date: string;
+  description: string;
+  amount: string;
+  status: "pending" | "posted";
+  notes: string;
+};
+
+export type ImportRowError = {
+  row: number;
+  field: string;
+  message: string;
+};
+
+export type ImportPreview = {
+  account: string;
+  file_name: string;
+  row_count: number;
+  valid_count: number;
+  error_count: number;
+  errors: ImportRowError[];
+  errors_truncated: boolean;
+  rows: ImportRow[];
+  preview_truncated: boolean;
+  preview_token: string | null;
+  already_imported: ImportBatch | null;
+  can_commit: boolean;
+};
+
+export type ImportCommit = {
+  batch: ImportBatch;
+  duplicate: boolean;
 };
