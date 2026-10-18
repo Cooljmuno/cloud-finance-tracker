@@ -2,8 +2,11 @@
 
 import copy
 import json
+import os
 import re
 import subprocess
+import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 
@@ -23,16 +26,25 @@ class AwsCli:
 
     def run(self, *args, payload=None):
         command = ["aws", "--region", self.region, "--output", "json", "--no-cli-pager", *args]
-        if payload is not None:
-            command.extend(["--cli-input-json", "file:///dev/stdin"])
         try:
-            result = subprocess.run(
-                command,
-                input=json.dumps(payload) if payload is not None else None,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
+            with ExitStack() as cleanup:
+                if payload is not None:
+                    directory = cleanup.enter_context(
+                        tempfile.TemporaryDirectory(prefix="finance-aws-")
+                    )
+                    os.chmod(directory, 0o700)
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", encoding="utf-8", dir=directory, delete=False
+                    ) as request:
+                        os.fchmod(request.fileno(), 0o600)
+                        json.dump(payload, request)
+                    command.extend(["--cli-input-json", f"file://{request.name}"])
+                result = subprocess.run(
+                    command,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
         except OSError as error:
             raise DeploymentError("AWS CLI v2 is required and must be on PATH.") from error
         if result.returncode:
