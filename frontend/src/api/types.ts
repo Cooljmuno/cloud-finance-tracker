@@ -47,6 +47,9 @@ export type FinanceTransaction = {
   category: string | null;
   category_name: string | null;
   import_batch: string | null;
+  category_source: "manual" | "rule" | "uncategorized";
+  matched_rule: string | null;
+  matched_rule_name: string | null;
   transaction_date: string;
   description: string;
   amount: string;
@@ -66,7 +69,8 @@ export type TransactionFilters = {
 
 export type CreateTransaction = {
   account: string;
-  category: string | null;
+  category?: string | null;
+  category_mode?: "automatic" | "manual";
   transaction_date: string;
   description: string;
   amount: string;
@@ -117,4 +121,51 @@ export type ImportPreview = {
 export type ImportCommit = {
   batch: ImportBatch;
   duplicate: boolean;
+};
+
+export type CategorizationRule = {
+  id: string;
+  name: string;
+  match_text: string;
+  priority: number;
+  category: string;
+  category_name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RuleInput = Pick<
+  CategorizationRule,
+  "name" | "match_text" | "priority" | "category" | "is_active"
+>;
+
+export type MonthlyBudget = {
+  id: string;
+  category: string;
+  category_name: string;
+  month: string;
+  currency: string;
+  amount: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BudgetInput = Pick<MonthlyBudget, "category" | "month" | "currency" | "amount">;
+
+export type MonthlyReport = {
+  month: string;
+  currency: string;
+  transaction_count: number;
+  pending_count: number;
+  totals: { income: string; spending: string; net: string; uncategorized_spending: string };
+  categories: {
+    category: string | null;
+    category_name: string;
+    spending: string;
+    budget: string | null;
+    remaining: string | null;
+    budget_id: string | null;
+  }[];
+  trend: { month: string; income: string; spending: string }[];
 };

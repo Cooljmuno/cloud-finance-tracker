@@ -40,6 +40,9 @@ const importedTransaction = {
   status: "posted",
   notes: "Imported purchase",
   import_batch: batch.id,
+  category_source: "uncategorized",
+  matched_rule: null,
+  matched_rule_name: null,
   created_at: "2026-10-18T00:00:00Z",
   updated_at: "2026-10-18T00:00:00Z",
 };

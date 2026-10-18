@@ -278,6 +278,10 @@ export function ImportPanel({ accounts, onImported, onBusyChange }: Props) {
           blank.
         </p>
         <p className="notice">
+          Enabled categorization rules run when you commit. This preview validates the CSV rows; it
+          does not reserve a category assignment.
+        </p>
+        <p className="notice">
           Importing the exact same file into the same account adds it only once. Overlapping files
           can add duplicate transactions. Identical rows within a file are preserved.
         </p>

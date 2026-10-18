@@ -68,20 +68,34 @@ class CategoryViewSet(OwnerViewSet):
     serializer_class = CategorySerializer
 
     def perform_destroy(self, instance):
-        if instance.transactions.exists():
-            raise Conflict(
-                "Categories with transactions cannot be deleted; mark the category inactive."
+        with transaction.atomic():
+            instance = (
+                Category.objects.select_for_update()
+                .filter(pk=instance.pk, owner=self.request.user)
+                .first()
             )
-        try:
-            instance.delete()
-        except RestrictedError as error:
-            raise Conflict(
-                "Categories with transactions cannot be deleted; mark the category inactive."
-            ) from error
+            if instance is None:
+                raise NotFound()
+            if instance.transactions.exists():
+                raise Conflict(
+                    "Categories with transactions cannot be deleted; mark the category inactive."
+                )
+            if instance.rules.exists() or instance.budgets.exists():
+                raise Conflict(
+                    "Categories with rules or budgets cannot be deleted; "
+                    "archive the category instead."
+                )
+            try:
+                instance.delete()
+            except RestrictedError as error:
+                raise Conflict(
+                    "Categories with financial history cannot be deleted; "
+                    "archive the category instead."
+                ) from error
 
 
 class TransactionViewSet(OwnerViewSet):
-    queryset = Transaction.objects.select_related("account", "category")
+    queryset = Transaction.objects.select_related("account", "category", "matched_rule")
     serializer_class = TransactionSerializer
 
     def get_queryset(self):

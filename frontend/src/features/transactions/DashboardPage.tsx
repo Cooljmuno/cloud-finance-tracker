@@ -27,8 +27,10 @@ import type {
 } from "../../api/types";
 import { useAppAuth } from "../../auth/AuthContext";
 import { ImportPanel } from "../imports/ImportPanel";
+import { PlanningPanel } from "../planning/PlanningPanel";
 import { AccountManager } from "../resources/AccountManager";
 import { CategoryManager } from "../resources/CategoryManager";
+import { RulesPanel } from "../rules/RulesPanel";
 import { TransactionFilters } from "./TransactionFilters";
 import { TransactionForm } from "./TransactionForm";
 import { TransactionTable } from "./TransactionTable";
@@ -41,7 +43,7 @@ const emptyFilters: Filters = {
   dateTo: "",
 };
 
-type WorkspaceView = "Transactions" | "Accounts" | "Categories" | "Imports";
+type WorkspaceView = "Transactions" | "Accounts" | "Categories" | "Imports" | "Rules" | "Planning";
 
 export function DashboardPage() {
   const { user, transport, signOut, invalidate } = useAppAuth();
@@ -305,17 +307,19 @@ export function DashboardPage() {
       </header>
 
       <nav className="workspace-nav" aria-label="Workspace">
-        {(["Transactions", "Accounts", "Categories", "Imports"] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            aria-current={view === item ? "page" : undefined}
-            disabled={mutationBusy || signingOut}
-            onClick={() => changeView(item)}
-          >
-            {item}
-          </button>
-        ))}
+        {(["Transactions", "Accounts", "Categories", "Imports", "Rules", "Planning"] as const).map(
+          (item) => (
+            <button
+              key={item}
+              type="button"
+              aria-current={view === item ? "page" : undefined}
+              disabled={mutationBusy || signingOut}
+              onClick={() => changeView(item)}
+            >
+              {item}
+            </button>
+          ),
+        )}
       </nav>
 
       <section className="dashboard-intro">
@@ -323,7 +327,9 @@ export function DashboardPage() {
           <p className="eyebrow">
             {view === "Transactions" || view === "Imports"
               ? "Transaction workspace"
-              : "Workspace settings"}
+              : view === "Planning"
+                ? "Monthly overview"
+                : "Workspace settings"}
           </p>
           <h1>
             {view === "Transactions"
@@ -332,7 +338,11 @@ export function DashboardPage() {
                 ? "Accounts that fit your life."
                 : view === "Imports"
                   ? "Bring your transactions together."
-                  : "Give every entry context."}
+                  : view === "Rules"
+                    ? "Let familiar entries find their place."
+                    : view === "Planning"
+                      ? "Make room for what matters."
+                      : "Give every entry context."}
           </h1>
           <p>
             {view === "Transactions"
@@ -341,7 +351,11 @@ export function DashboardPage() {
                 ? "Create accounts, edit their details, and archive the ones you no longer use."
                 : view === "Imports"
                   ? "Check a CSV, review its rows, and import it into one of your accounts."
-                  : "Organize expenses, income, and transfers with categories you control."}
+                  : view === "Rules"
+                    ? "Use clear, ordered rules to categorize transactions while keeping your manual choices."
+                    : view === "Planning"
+                      ? "Review posted spending, compare monthly budgets, and see how your habits change."
+                      : "Organize expenses, income, and transfers with categories you control."}
           </p>
         </div>
         {view === "Transactions" ? (
@@ -445,6 +459,19 @@ export function DashboardPage() {
                 : `Imported ${batch.row_count} transactions into ${batch.account_name}.`,
             );
           }}
+        />
+      ) : view === "Rules" && resourcesReady ? (
+        <RulesPanel
+          categories={categories}
+          onBusyChange={setMutationBusy}
+          onChanged={refreshLedger}
+        />
+      ) : view === "Planning" && resourcesReady ? (
+        <PlanningPanel
+          accounts={accounts}
+          categories={categories}
+          onBusyChange={setMutationBusy}
+          onChanged={setAnnouncement}
         />
       ) : view !== "Transactions" && !resourceError ? (
         <p className="loading-state">Loading your workspace…</p>

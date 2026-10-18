@@ -23,6 +23,8 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
   database-level invariants.
 - Built bounded CSV preview and atomic commit workflows with signed preview receipts, account
   locking, and database-enforced protection against importing the same file twice.
+- Added ordered categorization rules with explicit manual overrides, monthly category budgets,
+  and currency-scoped reports calculated from posted transactions.
 - Gated changes with linting, type checking, migrations checks, unit and API tests, browser
   workflows, and container builds in GitHub Actions.
 
@@ -39,16 +41,21 @@ AWS infrastructure and Terraform deployment are planned for a later milestone.
 - Authenticated per-user CRUD APIs for financial accounts, categories, and transactions.
 - CSV preview with row and field errors, atomic import, and paginated per-user import history.
 - Exact-file retry protection that preserves legitimate repeated purchases within a statement.
+- Explainable description-matching rules, with an explicit action for categorizing eligible
+  existing transactions and manual choices that automatic rules preserve.
+- Monthly expense-category budgets with actual spending, remaining amounts, and signed refunds.
+- Monthly spending by category and a six-month trend with accessible charts and exact values.
 - Deterministic synthetic fixtures with three accounts, ten categories, and 24 transactions.
 
 New account forms use USD. Existing account currencies are read-only in the UI; currency conversion
 is not implemented. Archived resources remain visible in transaction history. An existing
-transaction can keep its current archived account or category when edited; new transactions require
+transaction can keep its current archived account or category when edited; new assignments require
 active resources. Deleting an account or category used by transactions returns `409` and advises
 archiving it. Accounts with an import receipt also require archiving, even after their imported
-transactions have been deleted.
+transactions have been deleted. Categories referenced by rules or budgets must also be archived
+instead of deleted.
 
-The current automated suite contains 137 Pytest tests, 31 Vitest tests, and 2 Playwright browser
+The current automated suite contains 198 Pytest tests, 44 Vitest tests, and 2 Playwright browser
 workflows. See [`docs/decisions`](docs/decisions) for the tradeoffs behind the architecture.
 
 ## Architecture
@@ -90,6 +97,8 @@ a transaction payload returns `400`.
 | Categories | `/api/v1/categories/` | `/api/v1/categories/{uuid}/` |
 | Transactions | `/api/v1/transactions/` | `/api/v1/transactions/{uuid}/` |
 | Imports | `/api/v1/imports/` | `/api/v1/imports/{uuid}/` |
+| Categorization rules | `/api/v1/rules/` | `/api/v1/rules/{uuid}/` |
+| Monthly budgets | `/api/v1/budgets/` | `/api/v1/budgets/{uuid}/` |
 
 Transaction lists accept `account`, `category`, `status`, `date_from`, and `date_to` query
 parameters. Results are paginated and sorted newest first.
@@ -146,7 +155,83 @@ Only the filename, hash, record count, account, and receipt timestamp are retain
 metadata. Raw CSV contents are not retained after the request. Imported transactions carry a
 read-only `import_batch` reference and can be edited or deleted normally. The receipt remains, so
 retrying an original file does not undo edits or recreate transactions the user has deleted.
-Categorization rules are a later milestone; imports initially create uncategorized transactions.
+New imports evaluate the current categorization rules when committed. Preview validates the file;
+it does not promise a category or freeze the rules. Retrying an existing import returns its original
+receipt without reevaluating or replacing its transactions.
+
+### Categorization rules and manual choices
+
+Open **Rules** to create a rule with a name, description substring, priority, category, and enabled
+state. Matching uses a case-insensitive literal substring of the normalized transaction description,
+not a regular expression. Lower priority numbers run first; ties use the oldest rule first. The
+first enabled rule with an active category wins. Priorities range from 1 to 9,999 and default to 100.
+Rule names are unique per user without regard to case.
+
+New transaction forms default to automatic categorization. Choose a category, or explicitly choose
+uncategorized, to make a manual decision. Manual decisions survive description edits and bulk rule
+application. Switching back to automatic reevaluates the description. Editing the description of an
+automatically categorized transaction also reevaluates it; editing only its notes preserves its
+category and rule provenance.
+
+Creating, editing, disabling, or deleting a rule does not rewrite existing transactions. The
+confirmed **Apply rules** action fills only automatically uncategorized transactions. It preserves
+both existing rule assignments and manual choices, including a manual uncategorized choice. If no
+rule matches, a transaction remains eligible for a future application. Transactions that existed
+before this milestone are migrated as manual, including those without a category, so their previous
+state is preserved.
+
+| API input or action | Behavior |
+| --- | --- |
+| `category_mode: "automatic"` | Evaluate the first matching rule; a non-null `category` is invalid in this mode |
+| An explicit `category`, including `null`, without a mode | Record a manual choice |
+| `category_mode: "manual"` without `category` | Keep the current category and clear the matched-rule reference |
+| Create with neither `category` nor `category_mode` | Use automatic categorization |
+| Update without either field | Preserve the choice, except an automatic description change reevaluates it |
+| `POST /api/v1/rules/apply/` | Atomically examine eligible transactions and return `examined` and `updated` counts |
+
+Transaction responses expose read-only `category_source` (`manual`, `rule`, or `uncategorized`),
+`matched_rule`, and `matched_rule_name`. Deleting a rule clears its reference while preserving the
+transaction's existing category and source. Rule creation and new category assignments require an
+owned active category; an edited rule can retain its current archived category, but matching skips
+that rule while the category remains archived.
+
+### Budgets and spending reports
+
+Open **Planning** and choose a budget month and report currency. Create a positive monthly budget
+for an active expense category. Each user can have one budget per category, calendar month, and
+currency. The API accepts a month as `YYYY-MM` and stores its first day; money remains a decimal
+string. Budgets can be edited; deletion requires confirmation. An existing budget can keep its current
+archived expense category, and a category with budgets cannot change to another kind.
+
+`GET /api/v1/budgets/?month=YYYY-MM&currency=USD` filters the paginated budget collection.
+`GET /api/v1/reports/monthly/?month=YYYY-MM&currency=USD` returns monthly totals, category
+spending with budget and remaining amounts, and exactly six calendar months of income and spending
+ending in the selected month. Months without activity are zero-filled. The report month is required
+and must be at least `0001-06`; currency defaults to USD and is normalized to three uppercase ASCII
+letters.
+
+Reports select transaction dates in the requested calendar month and accounts in the requested
+currency. They include archived account and category history. Posted transactions contribute to
+totals; pending transactions have a separate count. Opening balances and transactions assigned to
+transfer categories do not contribute to spending or income. An unclassified transfer cannot be
+identified automatically from its amount alone. Reports use each category's current kind and each
+account's current currency; they are calculated from the current ledger, not saved historical
+snapshots. Changing that classification can change how earlier transactions appear in a report.
+
+| Transaction classification | Income | Spending |
+| --- | --- | --- |
+| Income category | Signed amount; a negative adjustment reduces income | No contribution |
+| Expense category | No contribution | Negated signed amount; a positive refund reduces spending |
+| No category, positive amount | Amount | No contribution |
+| No category, negative amount | No contribution | Negated amount |
+| Transfer category or pending status | No contribution | No contribution |
+
+Net is income minus spending. Budget usage follows the same expense semantics, so refunds can
+produce negative spending and remaining amounts greater than the budget. Category rows include
+expense categories with posted activity or a budget, plus uncategorized spending when present.
+Budget-only categories show zero spending. Charts retain signed values and provide exact values
+alongside the graphics. There is no currency conversion, mixed-currency total, balance calculation,
+or claim that these summaries represent account balances.
 
 ## Local development
 
@@ -198,6 +283,29 @@ an amount to `0` in a copy of the file and confirm that preview reports the fiel
 commit. Use a separate practice account if you want to keep these checks apart from the seeded
 fixtures; that account can be archived after importing.
 
+To check categorization and planning with synthetic data:
+
+1. Create a practice USD account and a practice expense category named `Practice coffee`. Add a
+   posted transaction dated in the month you will report, with description `Practice coffee shop`
+   and amount `-12.34`, leaving its category automatic. With no matching rule, it is uncategorized.
+2. Open **Rules** and create `Practice coffee rule`, matching `Practice coffee`, with priority 10
+   and the practice expense category. Confirm **Apply rules**, then find the transaction in the
+   ledger with its rule assignment.
+3. Add another matching transaction but explicitly choose uncategorized. Apply rules again and
+   confirm that this manual choice remains uncategorized. Change an automatic transaction's notes
+   without changing its category and confirm that its rule assignment is preserved.
+4. Add a posted `Practice coffee refund` for `2.00` and a pending `Practice coffee pending` for
+   `-5.00`, both automatic and in the same month. Open **Planning**, choose that month and USD,
+   then create a `100.00` budget for `Practice coffee`. Its spending should be `10.34` and its
+   remaining amount `89.66`; the pending purchase is excluded.
+5. Check the category chart, exact values, and six-month trend. Change the report month and currency
+   and confirm that the result updates without combining currencies. Archive the practice category
+   and confirm that its existing budget and transaction history remain visible in Planning.
+
+Use distinct practice descriptions if you already have a broader matching rule. Rules apply to
+eligible transactions across your workspace, so use a separate local test user when you need a
+fully isolated rehearsal.
+
 The API and database health response is available at
 <http://localhost:8000/api/v1/health/>.
 
@@ -228,8 +336,8 @@ This changes only the password. Running `seed_demo_data` again updates its fixtu
 duplicating them, which can replace edits to those synthetic fixtures. Its `--reset-password`
 option also updates fixtures while changing the password; use `changepassword` when you only need
 new credentials. The seed command's `--reset` option deletes all finance records belonging to the
-demo user, including manually added transactions and import receipts, before recreating the
-synthetic fixtures.
+demo user, including manually added transactions, import receipts, rules, and budgets, before
+recreating the synthetic fixtures.
 
 ### Refreshing frontend dependencies
 
@@ -292,6 +400,11 @@ A PostgreSQL test runs simultaneous commits of an identical file and verifies th
 resolve to one import receipt and one set of transactions. Other conflict-handling tests exercise
 controlled interleavings. These correctness tests do not measure concurrent-load performance.
 
+Rule and report tests cover manual overrides, legacy-data migration, import-time categorization,
+budget constraints, signed refunds and income adjustments, excluded transfers and pending entries,
+currency isolation, and zero-filled trends. The manual rules and planning workflow above checks
+those product boundaries through the running application.
+
 Pytest uses in-memory SQLite when PostgreSQL environment variables are absent. CI and Docker run
 the same suite against PostgreSQL so database behavior is still verified using the production
 database engine.
@@ -322,9 +435,10 @@ VITE_COGNITO_LOGOUT_URI
 
 ## Next milestone
 
-Add ordered, explainable categorization rules with manual overrides, monthly category budgets,
-and spending summaries and charts. Later milestones add Terraform-managed AWS infrastructure,
-observability, and deployment workflows.
+Add Terraform-managed AWS infrastructure, operational observability, and deployment workflows.
+The planned topology uses S3 and CloudFront for the React client, ECS Fargate for Django, RDS for
+PostgreSQL, and Cognito for hosted authentication. These are deployment targets; the application
+has not yet been deployed to AWS.
 
 ## Data policy
 
