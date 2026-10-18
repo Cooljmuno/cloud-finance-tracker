@@ -1,0 +1,2 @@
+aws_region       = "us-east-2"
+state_bucket_name = "REPLACE-WITH-YOUR-UNIQUE-STATE-BUCKET"
